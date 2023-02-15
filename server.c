@@ -52,10 +52,13 @@ void *thread_function(void *rutas)
         }
 }
 
-int start_server(int port, hash_t *rutas)
+int iniciar_server(uint16_t port, hash_t *rutas, void (*f)())
 {
         int server_socket, client_socket;
         struct sockaddr_in server_address;
+        
+        if (f != NULL) 
+                f();    //no se porque no se ejecuta ._.XD, tipo se ejecuta solo cuando no abre el servidor? re sus
         
 
         for (int i = 0; i < THREAD_POOL_SIZE; i++)

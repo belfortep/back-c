@@ -2,6 +2,7 @@
 #define RUTAS_H_
 
 #include "hash.h"
+typedef enum { GET, POST, PUT, DELETE } http_header;
 
 typedef struct request{
         char *body;
@@ -16,7 +17,7 @@ typedef struct response{
         int client_socket;
 } response_t;
 
-void *crear_ruta(hash_t *hash, char *nombre_ruta, void *(*f)(request_t *request, response_t *response, void *aux), void *aux, int tipo);
+void *crear_ruta(hash_t *hash, char *nombre_ruta, void *(*f)(request_t *request, response_t *response, void *aux), void *aux, http_header tipo);
 void *handle_connection(void *client_pointer, void *rutas);
 
 void *send_response(response_t *response);

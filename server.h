@@ -2,8 +2,9 @@
 #define SERVER_H_
 
 #include "hash.h"
+#include <stdint.h>
 
-int start_server(int port, hash_t *rutas);
+int iniciar_server(uint16_t port, hash_t *rutas, void (*f)());
 
 
 #endif // SERVER_H_
