@@ -32,9 +32,10 @@ void *send_response(response_t *response)
 
         if (response->status == 200)    //mejorar esta parte de los response
         {
-                snprintf((char *)response_data, sizeof(response_data), "HTTP/1.0 200 OK \r\n\r\n");
+                snprintf((char *)response_data, sizeof(response_data), "HTTP/1.0 200 OK \r\n\r\n ");
         }
 
+        
         strcat((char *)response_data, response->data);
 
         if(maneja_error(write(response->client_socket, (char *)response_data, strlen((char *)response_data)))) {
@@ -61,80 +62,16 @@ void *not_found(response_t *response)
         return NULL;
 }
 
-char *parse_request(char **claves[100], char **valores[100])
+void parse_request(char *request_data, char *claves[100], char *valores[100], char *route_url, char *method, int *cantidad_pares)
 {
-        
-}
-
-void *handle_connection(void *client_pointer, void *rutas)
-{
-        int client_socket = *((int *)client_pointer);
-        free(client_pointer);
-        //ssize_t message_size = 0;
-        ssize_t bytes_read;
-
-        uint8_t request_data[MAXLINE + 1];
-
-        memset(request_data, 0, MAXLINE);
-
-        /*while ((bytes_read = read(client_socket, request_data + message_size, (sizeof(request_data) - (size_t)message_size))) > 0)
-        {
-                printf("%s", request_data);
-                message_size += bytes_read;
-
-                if (message_size > MAXLINE - 1 || request_data[message_size - 1] == '\n')
-                        break;
-
-                //if (bytes_read == 0)
-                //        break;
-        }*/
-
-        bytes_read = read(client_socket, request_data, MAXLINE);
-        //printf("%s", request_data);
-
-        
-
-
-        if (bytes_read < 0)
-                return NULL; 
-
-        response_t *response = malloc(sizeof(response_t));      //verificar los malloc
-        request_t *request = malloc(sizeof(request_t));
-        response->client_socket = client_socket;
-
-
-        /*char *http_header = strtok((char *)request_data, "\n"); //ESTA MANERA DE SACAR ES PROVISIONAL, NECESITO ALGO TIPO REGEX CUANDO TENGA QUE
-        //SACAR COSAS DEL BODY O ALGO ASI
-        char *method = "";
-        char *route_url = "";
-        char *header = strtok(http_header, " ");
-
-        int header_parse_counter = 0;
-        while (header != NULL)
-        {
-                switch (header_parse_counter)
-                {
-                case 0:
-                        method = header;
-                case 1:
-                        route_url = header;
-                }
-                header = strtok(NULL, " ");
-                header_parse_counter++;
-        }*/
-
-
-
-        char *token = strtok((char *)request_data, "\n");
-
-        char http_header[101];
-        memcpy(http_header, token, 100);
-        char *claves[100];
-        char *valores[100];
         int posicion_insertar_clave = 0;
         int posicion_insertar_valor = 0;
         int iteraciones = 0;
         bool va_en_valor = false;
+        char *token = strtok((char *)request_data, "\n");
+        char http_header[101];
+
+        memcpy(http_header, token, 100);
 
         while(token != NULL) { 
                 
@@ -142,10 +79,13 @@ void *handle_connection(void *client_pointer, void *rutas)
                         
                         if (iteraciones % 2 == 0 && !va_en_valor) {
                                 claves[posicion_insertar_clave] = token;
+                                //printf("EN CLAVE GUARDE %s \n", claves[posicion_insertar_clave]);
                                 posicion_insertar_clave++;
                         }else if (iteraciones % 2 == 0 && va_en_valor) {
                                 valores[posicion_insertar_valor] = token;
+                                //printf("EN VALOR GUARDE %s \n", valores[posicion_insertar_valor]);
                                 posicion_insertar_valor++;   
+                                (*cantidad_pares)++;
                         }
                         
                         va_en_valor = !va_en_valor;
@@ -156,8 +96,6 @@ void *handle_connection(void *client_pointer, void *rutas)
         }
         
         char *header = strtok(http_header, " ");
-        char *method = "";
-        char *route_url = "";
 
         int header_parse_counter = 0;
         while (header != NULL)
@@ -165,21 +103,95 @@ void *handle_connection(void *client_pointer, void *rutas)
                 switch (header_parse_counter)
                 {
                 case 0:
-                        method = header;
+                        strcpy(method, header);
                 case 1:
-                        route_url = header;
+                        strcpy(route_url, header);
                 }
                 header = strtok(NULL, " ");
                 header_parse_counter++;
         }
+}
 
+
+
+
+response_t *create_response(int client_socket)
+{
+        response_t *response = malloc(sizeof(response_t));
+
+        if (!response)
+                return NULL;
+
+        response->data = "";
+        response->status = 404;
+        response->client_socket = client_socket;
+
+        return response;
+}
+
+
+request_t *create_request()
+{
+        request_t *request = malloc(sizeof(request_t));
+
+        if (!request)
+                return NULL;
+
+        request->body = hash_crear(10);
+        request->cookies = hash_crear(10);
+        request->params = hash_crear(10);
+        request->query = hash_crear(10);
+
+        if (request->body == NULL || request->cookies == NULL || request->params == NULL || request->query == NULL)
+                return NULL;
+
+        return request;
+}
+
+void free_request(request_t *request)
+{
+        hash_destruir(request->body);
+        hash_destruir(request->cookies);
+        hash_destruir(request->params);
+        hash_destruir(request->query);
+        free(request);
+}
+
+void *handle_connection(void *client_pointer, void *rutas)
+{
+        int client_socket = *((int *)client_pointer);
+        free(client_pointer);
+        ssize_t bytes_read;
+        uint8_t request_data[MAXLINE + 1];
+        memset(request_data, 0, MAXLINE);
+
+
+        bytes_read = read(client_socket, request_data, MAXLINE);
+        if (bytes_read < 0)
+                return NULL; 
+
+        response_t *response = create_response(client_socket);
+        request_t *request = create_request();
+
+        if (!response || !request)
+                return NULL;
         
+        char *claves[100];
+        char *valores[100];
+        char method[100];
+        char route_url[100];
+        int cantidad_pares = 0;
+        
+        parse_request((char *)request_data, claves, valores, route_url, method, &cantidad_pares);
 
-
+        for (int i = 0; i < cantidad_pares; i++)
+                hash_insertar(request->body, claves[i], valores[i], NULL);
+        
+        
         char la_ruta[MAXLINE];
         memset(la_ruta, 0, MAXLINE);
         strcat(la_ruta, method);
-        strcat(la_ruta, route_url);        
+        strcat(la_ruta, route_url); 
 
         estructura_ruta_t *estructura_ruta = hash_obtener(rutas, la_ruta);
 
@@ -189,7 +201,7 @@ void *handle_connection(void *client_pointer, void *rutas)
         if (estructura_ruta != NULL)
                 estructura_ruta->funcion(request, response, estructura_ruta->aux);
 
-        free(request);
+        free_request(request);
 
         return NULL;
 }
@@ -218,7 +230,7 @@ void *crear_ruta(hash_t *hash, char *nombre_ruta, void *(*f)(request_t *request,
         return hash_insertar(hash, nombre, estructura_ruta, NULL);
 }
 
-response_t *set_data(response_t *response, void *data)
+response_t *set_data(response_t *response, char *data)
 {
         response->data = data;
         return response;
@@ -227,5 +239,13 @@ response_t *set_data(response_t *response, void *data)
 response_t *set_status(response_t *response, int status)
 {
         response->status = status;
+        return response;
+}
+
+response_t *set_data_json(response_t *response, char *clave, char *valor)
+{
+        response->claves[response->cantidad_pares] = clave;
+        response->valores[response->cantidad_pares] = valor;
+        response->cantidad_pares++;
         return response;
 }

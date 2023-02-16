@@ -13,7 +13,8 @@ void *funcion_de_ruta(request_t *request, response_t *response, void *aux)
 void *funcion_de_otra_ruta(request_t *request, response_t *response, void *aux)
 {
         response = set_status(response, 200);
-        response = set_data(response, "sarasa");
+        char *clave1 = hash_obtener(request->body, "clave1");
+        response = set_data(response, clave1);
 
         return send_response(response);
 }
@@ -22,6 +23,7 @@ void *funcion_info(request_t *request, response_t *response, void *aux)
 {
         response = set_status(response, *(int *)aux);
         response = set_data(response, "ola que tal");
+        response = set_data_json(response, "clave", "valor");
         
 
         return send_response(response);
