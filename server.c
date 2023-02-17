@@ -24,18 +24,15 @@
 #define THREAD_POOL_SIZE 10
 #define TAMANIO_HASH 10
 
-
 pthread_t thread_pool[THREAD_POOL_SIZE];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t condition_var = PTHREAD_COND_INITIALIZER;
 
-
-
 void *thread_function(void *rutas)
 {
+        int *client_pointer;
         while (1)
         {
-                int *client_pointer;
                 pthread_mutex_lock(&mutex);
 
                 if ((client_pointer = dequeue()) == NULL)
@@ -46,19 +43,15 @@ void *thread_function(void *rutas)
                 pthread_mutex_unlock(&mutex);
 
                 if (client_pointer != NULL)
-                {
                         handle_connection(client_pointer, rutas);
-                }
+                
         }
 }
 
-int iniciar_server(uint16_t port, hash_t *rutas, void (*f)())
+int iniciar_server(uint16_t port, hash_t *rutas)
 {
         int server_socket, client_socket;
         struct sockaddr_in server_address;
-        
-        if (f != NULL) 
-                f();    //no se porque no se ejecuta ._.XD, tipo se ejecuta solo cuando no abre el servidor? re sus
         
 
         for (int i = 0; i < THREAD_POOL_SIZE; i++)
@@ -78,7 +71,7 @@ int iniciar_server(uint16_t port, hash_t *rutas, void (*f)())
         if ((listen(server_socket, SERVER_BACKLOG)) < 0)
                 return 0;
 
-        while (1 == 1)
+        while (1)
         {
                 // struct sockaddr_in addr;
                 // socklen_t addr_len;
@@ -90,13 +83,9 @@ int iniciar_server(uint16_t port, hash_t *rutas, void (*f)())
 
                 pthread_mutex_lock(&mutex);
                 enqueue(client_pointer);
+                //enqueue(&client_socket);
 
                 pthread_cond_signal(&condition_var);
                 pthread_mutex_unlock(&mutex);
-                
         }
 }
-
-
-
-

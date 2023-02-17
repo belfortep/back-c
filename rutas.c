@@ -15,8 +15,10 @@
 #include <netdb.h>
 #include <strings.h>
 #include <pthread.h>
+#include <jansson.h>
 #include "maneja_error.h"
 #define MAXLINE 4096
+
 
 typedef void *(*funcion_de_ruta)(request_t *request, response_t *response, void *aux);
 
@@ -28,74 +30,58 @@ typedef struct estructura_ruta
 
 void *send_response(response_t *response)
 {
-        uint8_t response_data[MAXLINE + 1];
+        char *response_data = malloc(sizeof(char) * MAXLINE);
 
         if (response->status == 200)    //mejorar esta parte de los response
         {
-                snprintf((char *)response_data, sizeof(response_data), "HTTP/1.0 200 OK \r\n\r\n ");
+                snprintf(response_data, MAXLINE, "HTTP/1.0 200 OK \r\n\r\n ");
         }
 
-        
-        strcat((char *)response_data, response->data);
-
-        if(maneja_error(write(response->client_socket, (char *)response_data, strlen((char *)response_data)))) {
-
+        if (response->data != NULL && response->json_data != NULL) {
+                strcat(response_data, response->data);
+                strcat(response_data, "\n");
+                strcat(response_data, response->json_data);
         }
+        else if (response->data != NULL) {
+                strcat(response_data, response->data);
+        } else if (response->json_data != NULL) {
+                strcat(response_data, response->json_data);
+        }
+
+        //if(maneja_error(write(response->client_socket, response_data, strlen(response_data)))) {
+        //}
+                if(write(response->client_socket, response_data, strlen(response_data))){
+
+                }
         close(response->client_socket);
-        memset(response_data, 0, MAXLINE);
         free(response);
+        free(response_data);
         return NULL;
 }
 
 void *not_found(response_t *response)
 {
-        uint8_t response_data[MAXLINE + 1];
+        char *response_data = malloc(sizeof(char) * MAXLINE);
 
-        snprintf((char *)response_data, sizeof(response_data), "HTTP/1.0 404 NOT FOUND \r\n\r\nNOT FOUND PAGE");
+        snprintf(response_data, MAXLINE, "HTTP/1.0 404 NOT FOUND \r\n\r\nNOT FOUND PAGE");
 
-        if(maneja_error(write(response->client_socket, (char *)response_data, strlen((char *)response_data)))){
+        //if(maneja_error(write(response->client_socket, response_data, strlen(response_data)))){
+
+        //}
+        if(write(response->client_socket, response_data, strlen(response_data))){
 
         }
         close(response->client_socket);
-        memset(response_data, 0, MAXLINE);
+        //memset(response_data, 0, MAXLINE);
         free(response);
+        free(response_data);
         return NULL;
 }
 
-void parse_request(char *request_data, char *claves[100], char *valores[100], char *route_url, char *method, int *cantidad_pares)
+
+int get_url_and_method(char *headers, char *route_url, char *method)
 {
-        int posicion_insertar_clave = 0;
-        int posicion_insertar_valor = 0;
-        int iteraciones = 0;
-        bool va_en_valor = false;
-        char *token = strtok((char *)request_data, "\n");
-        char http_header[101];
-
-        memcpy(http_header, token, 100);
-
-        while(token != NULL) { 
-                
-                if (iteraciones > 1 && iteraciones % 2 == 0) {
-                        
-                        if (iteraciones % 2 == 0 && !va_en_valor) {
-                                claves[posicion_insertar_clave] = token;
-                                //printf("EN CLAVE GUARDE %s \n", claves[posicion_insertar_clave]);
-                                posicion_insertar_clave++;
-                        }else if (iteraciones % 2 == 0 && va_en_valor) {
-                                valores[posicion_insertar_valor] = token;
-                                //printf("EN VALOR GUARDE %s \n", valores[posicion_insertar_valor]);
-                                posicion_insertar_valor++;   
-                                (*cantidad_pares)++;
-                        }
-                        
-                        va_en_valor = !va_en_valor;
-                }
-
-                token = strtok(NULL, "\"");
-                iteraciones++;
-        }
-        
-        char *header = strtok(http_header, " ");
+        char *header = strtok(headers, " ");
 
         int header_parse_counter = 0;
         while (header != NULL)
@@ -107,12 +93,33 @@ void parse_request(char *request_data, char *claves[100], char *valores[100], ch
                 case 1:
                         strcpy(route_url, header);
                 }
-                header = strtok(NULL, " ");
+                header = strtok(NULL, " ");     //conditional jump
                 header_parse_counter++;
         }
+
+        return 0;
 }
 
 
+json_t *convert_to_json(char *request_data)
+{
+        if (request_data == NULL)
+                return NULL;
+
+        char *my_json = malloc(sizeof(char) * MAXLINE);
+        my_json[0] = '{';       //ver si esto anda o que onda
+        strcat(my_json, request_data);
+
+        json_t *root;
+        json_error_t error;
+
+        root = json_loads(my_json, 0, &error);
+        free(my_json);
+        if (!root)
+                return NULL;
+
+        return root;
+}
 
 
 response_t *create_response(int client_socket)
@@ -122,9 +129,10 @@ response_t *create_response(int client_socket)
         if (!response)
                 return NULL;
 
-        response->data = "";
+        response->data = NULL;
         response->status = 404;
         response->client_socket = client_socket;
+        response->json_data = NULL;
 
         return response;
 }
@@ -137,23 +145,14 @@ request_t *create_request()
         if (!request)
                 return NULL;
 
-        request->body = hash_crear(10);
-        request->cookies = hash_crear(10);
-        request->params = hash_crear(10);
-        request->query = hash_crear(10);
-
-        if (request->body == NULL || request->cookies == NULL || request->params == NULL || request->query == NULL)
-                return NULL;
-
         return request;
 }
 
 void free_request(request_t *request)
 {
-        hash_destruir(request->body);
-        hash_destruir(request->cookies);
-        hash_destruir(request->params);
-        hash_destruir(request->query);
+        //hash_destruir(request->cookies);
+        //hash_destruir(request->params);
+        //hash_destruir(request->query);
         free(request);
 }
 
@@ -161,39 +160,70 @@ void *handle_connection(void *client_pointer, void *rutas)
 {
         int client_socket = *((int *)client_pointer);
         free(client_pointer);
-        ssize_t bytes_read;
-        uint8_t request_data[MAXLINE + 1];
+
+        //ssize_t bytes_read;
+        char *request_data = malloc(sizeof(char) * MAXLINE);       //uninitialised value?
         memset(request_data, 0, MAXLINE);
+        
 
-
-        bytes_read = read(client_socket, request_data, MAXLINE);
-        if (bytes_read < 0)
-                return NULL; 
+        //bytes_read = read(client_socket, request_data, MAXLINE);
+        //memset(request_data, 0, MAXLINE);
+        if (read(client_socket, request_data, MAXLINE) < 0)
+                return NULL;
+        //if (bytes_read < 0)
+        //        return NULL; 
+        //printf("request_data es : %s \n", request_data);
 
         response_t *response = create_response(client_socket);
         request_t *request = create_request();
 
-        if (!response || !request)
+        if (!response || !request || !request_data)
                 return NULL;
         
-        char *claves[100];
-        char *valores[100];
-        char method[100];
-        char route_url[100];
-        int cantidad_pares = 0;
-        
-        parse_request((char *)request_data, claves, valores, route_url, method, &cantidad_pares);
+        char *method = malloc(sizeof(char) * 256);
+        char *route_url= malloc(sizeof(char) * 256);
+        //memset(method, 0, 256);
+        //memset(route_url, 0, 256);
+        if (!method || !route_url)
+                return NULL;
 
-        for (int i = 0; i < cantidad_pares; i++)
-                hash_insertar(request->body, claves[i], valores[i], NULL);
+        char *token = strtok(request_data, "{");       
+        if (!token) 
+                return NULL;
+
+        //printf("token es : %s \n", token);
+        char *headers = malloc(sizeof(char) * MAXLINE);
+        if (!headers)
+                return NULL;
+        memset(headers, 0, MAXLINE);
+        
+        strcpy(headers, token);       //conditional jump, aca parece que es donde mas rompe
+        
+
+        token = strtok(NULL, "{");     
         
         
-        char la_ruta[MAXLINE];
+
+        get_url_and_method(headers, route_url, method);
+        
+        
+        json_t *root = convert_to_json(token);
+        
+        request->body = root;
+        
+        
+        char *la_ruta = malloc(sizeof(char) * 4096);    //unintialised value
+
         memset(la_ruta, 0, MAXLINE);
-        strcat(la_ruta, method);
+        strcat(la_ruta, method);        //conditional jump
         strcat(la_ruta, route_url); 
 
         estructura_ruta_t *estructura_ruta = hash_obtener(rutas, la_ruta);
+        free(la_ruta);
+        free(route_url);
+        free(method);
+        free(request_data);
+        free(headers);
 
         if (estructura_ruta == NULL)
                 not_found(response);
@@ -202,6 +232,7 @@ void *handle_connection(void *client_pointer, void *rutas)
                 estructura_ruta->funcion(request, response, estructura_ruta->aux);
 
         free_request(request);
+        
 
         return NULL;
 }
@@ -242,10 +273,8 @@ response_t *set_status(response_t *response, int status)
         return response;
 }
 
-response_t *set_data_json(response_t *response, char *clave, char *valor)
+response_t *set_data_json(response_t *response, json_t *json_data)
 {
-        response->claves[response->cantidad_pares] = clave;
-        response->valores[response->cantidad_pares] = valor;
-        response->cantidad_pares++;
+        response->json_data = json_dumps(json_data, JSON_ENSURE_ASCII);
         return response;
 }
