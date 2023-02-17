@@ -5,14 +5,14 @@
 
 void *funcion_de_ruta(request_t *request, response_t *response, void *aux)
 {
-        response = set_status(response, 200);
+        response = set_status(response, OK);
         response = set_data(response, "data");
 
         return send_response(response);
 }
 void *funcion_de_otra_ruta(request_t *request, response_t *response, void *aux)
 {
-        response = set_status(response, 200);
+        response = set_status(response, OK);
         //json_t *data = json_object_get(request->body, "clave1");
         //response = set_data(response, (char *)json_string_value(data));
         json_t *mando_info =json_pack("{sisi}", "foo", 100, "bar", 10);
@@ -24,7 +24,7 @@ void *funcion_de_otra_ruta(request_t *request, response_t *response, void *aux)
 
 void *funcion_info(request_t *request, response_t *response, void *aux)
 {
-        response = set_status(response, *(int *)aux);
+        response = set_status(response, OK);
         response = set_data(response, "ola que tal");
         
         return send_response(response);
@@ -32,7 +32,7 @@ void *funcion_info(request_t *request, response_t *response, void *aux)
 
 void *funcion_post(request_t *request, response_t *response, void *aux)
 {
-        response = set_status(response, 200);
+        response = set_status(response, OK);
         response = set_data(response, "ola solo mirame en post");
         
         return send_response(response);

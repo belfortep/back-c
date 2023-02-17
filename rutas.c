@@ -267,7 +267,7 @@ response_t *set_data(response_t *response, char *data)
         return response;
 }
 
-response_t *set_status(response_t *response, int status)
+response_t *set_status(response_t *response, http_status status)
 {
         response->status = status;
         return response;
