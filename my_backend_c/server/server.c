@@ -14,9 +14,9 @@
 #include <netdb.h>
 #include <strings.h>
 #include <pthread.h>
-#include "cola.h"
-#include "hash.h"
-#include "rutas.h"
+#include "../data_structures/queue.h"
+
+#include "../router/routes.h"
 
 #define SA struct sockaddr
 

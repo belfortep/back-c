@@ -1,7 +1,7 @@
-#include "rutas.h"
-#include "server.h"
+
+#include "my_backend_c/server/server.h"
 #include "stdio.h"
-#define PORT 4000
+#define PORT 5000
 
 void *funcion_de_ruta(request_t *request, response_t *response, void *aux)
 {
@@ -39,6 +39,12 @@ void *funcion_post(request_t *request, response_t *response, void *aux)
 }
 
 
+void *funcion_usuario(request_t *request, response_t *response, void *aux)
+{
+        response = set_status(response, OK);
+
+        return send_response(response);
+}
 
 int main()
 {
@@ -48,7 +54,8 @@ int main()
         crear_ruta(hash, "/sarasa", funcion_de_otra_ruta, NULL, POST);
         crear_ruta(hash, "/api/info", funcion_info, &numero, PUT);
         crear_ruta(hash, "/ola", funcion_post, NULL, DELETE);
+        crear_ruta(hash, "/user/:id", funcion_usuario, NULL, GET);
         
-        iniciar_server(4000, hash);
+        iniciar_server(PORT, hash);
         hash_destruir(hash);
 }

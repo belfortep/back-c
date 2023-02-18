@@ -1,5 +1,5 @@
-#ifndef COLA_H_
-#define COLA_H_
+#ifndef QUEUE_H_
+#define QUEUE_H_
 
 typedef struct node {
         struct node* next;
@@ -11,4 +11,4 @@ typedef struct node {
 int *dequeue();
 void enqueue(int *client_socket);
 
-#endif // COLA_H_
+#endif // QUEUE_H_

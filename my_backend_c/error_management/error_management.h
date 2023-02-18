@@ -1,5 +1,5 @@
-#ifndef __MANEJA_ERROR_H__
-#define __MANEJA_ERROR_H__
+#ifndef __ERROR_MANAGEMENT_H__
+#define __ERROR_MANAGEMENT_H__
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -21,4 +21,4 @@
 int maneja_error(ssize_t valor);
 
 
-#endif /* __MANEJA_ERROR_H__ */
+#endif /* __ERROR_MANAGEMENT_H__ */

@@ -1,4 +1,3 @@
-#include "rutas.h"
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <signal.h>
@@ -16,7 +15,8 @@
 #include <strings.h>
 #include <pthread.h>
 #include <jansson.h>
-#include "maneja_error.h"
+#include "../error_management/error_management.h"
+#include "routes.h"
 #define MAXLINE 4096
 
 
@@ -82,7 +82,7 @@ void *not_found(response_t *response)
 int get_url_and_method(char *headers, char *route_url, char *method)
 {
         char *header = strtok(headers, " ");
-
+        
         int header_parse_counter = 0;
         while (header != NULL)
         {
@@ -93,9 +93,9 @@ int get_url_and_method(char *headers, char *route_url, char *method)
                 case 1:
                         strcpy(route_url, header);
                 }
-                header = strtok(NULL, " ");     //conditional jump
+                header = strtok(NULL, " ");     
                 header_parse_counter++;
-        }
+        }       //      
 
         return 0;
 }
@@ -138,12 +138,14 @@ response_t *create_response(int client_socket)
 }
 
 
-request_t *create_request()
+request_t *create_request(json_t *body)
 {
         request_t *request = malloc(sizeof(request_t));
 
         if (!request)
                 return NULL;
+
+        request->body = body;
 
         return request;
 }
@@ -161,29 +163,14 @@ void *handle_connection(void *client_pointer, void *rutas)
         int client_socket = *((int *)client_pointer);
         free(client_pointer);
 
-        //ssize_t bytes_read;
-        char *request_data = malloc(sizeof(char) * MAXLINE);       //uninitialised value?
-        memset(request_data, 0, MAXLINE);
+        char request_data[MAXLINE];     //veamos ahora si no rompe el stack asi (?
+        memset(request_data, 0, MAXLINE);       
         
-
-        //bytes_read = read(client_socket, request_data, MAXLINE);
-        //memset(request_data, 0, MAXLINE);
         if (read(client_socket, request_data, MAXLINE) < 0)
                 return NULL;
-        //if (bytes_read < 0)
-        //        return NULL; 
-        //printf("request_data es : %s \n", request_data);
-
-        response_t *response = create_response(client_socket);
-        request_t *request = create_request();
-
-        if (!response || !request || !request_data)
-                return NULL;
         
-        char *method = malloc(sizeof(char) * 256);
-        char *route_url= malloc(sizeof(char) * 256);
-        //memset(method, 0, 256);
-        //memset(route_url, 0, 256);
+        char *method = malloc(sizeof(char) * (MAXLINE/16));
+        char *route_url= malloc(sizeof(char) * (MAXLINE/16));
         if (!method || !route_url)
                 return NULL;
 
@@ -191,49 +178,59 @@ void *handle_connection(void *client_pointer, void *rutas)
         if (!token) 
                 return NULL;
 
-        //printf("token es : %s \n", token);
         char *headers = malloc(sizeof(char) * MAXLINE);
         if (!headers)
                 return NULL;
+
         memset(headers, 0, MAXLINE);
-        
-        strcpy(headers, token);       //conditional jump, aca parece que es donde mas rompe
-        
-
+        strcpy(headers, token);
         token = strtok(NULL, "{");     
-        
-        
-
         get_url_and_method(headers, route_url, method);
         
-        
-        json_t *root = convert_to_json(token);
-        
-        request->body = root;
-        
-        
-        char *la_ruta = malloc(sizeof(char) * 4096);    //unintialised value
-
-        memset(la_ruta, 0, MAXLINE);
-        strcat(la_ruta, method);        //conditional jump
-        strcat(la_ruta, route_url); 
-
+        char *la_ruta = malloc(sizeof(char) * (MAXLINE/8));    
+        memset(la_ruta, 0, (MAXLINE/8));
+        strcat(la_ruta, method);        
+        strcat(la_ruta, route_url);
+        //idea para obtener el :id, digamos que en route_url yo voy a tener algo del estilo
+        //      /api/users/123456
+        //      puedo ir haciendo strtok con los / hasta llegar al ultimo (que ese seria el :id)
+        //      pero, y si me llega algo que no tiene un :id? digamos me llega /api/users
+        //      y ese tambien es un endpoint valido, tipo digamos tengo las rutas GET /api/users y la GET /api/users/:id
+        //      y tambien esta la ruta GET /api
+        //      ahora, como verifico?
+        //      quiza cambiar algo en la implementacion del hash, para verificar si tengo un : al insertar la clave?
+        //por como esta ahora, si yo guardo un /user/:id
+        //el hacer hash_obtener solo acepta si tenia un :id
+        //AH, una idea, yo tengo mi /api/users, con mi idea de los strtok voy a obtener "users"
+        //y si guardo un entero en el hash, tipo la estructura ruta guarde cuantas "/" tiene en el nombre
+        //entonces yo cuando obtenga de por ejemplo
+        // /api/users   aca pase 2 "/"
+        //en cambio cuando agarre de algo tipo  /api/users/un_id
+        //aca pase por 3 "/", por lo tanto la que quiero es la de :id, creo que tiene sentido y puedo implementarlo
+        // asi se, se tiene 2 "/" es el normal, si tiene 3 es el :id
+        //osea, en hash obtener tengo que verificar el string y la cantidad de / que pase?
         estructura_ruta_t *estructura_ruta = hash_obtener(rutas, la_ruta);
+
+        response_t *response = create_response(client_socket);
+        request_t *request = create_request(convert_to_json(token));
+
+        if (!response || !request)
+                return NULL;
+        
         free(la_ruta);
         free(route_url);
         free(method);
-        free(request_data);
         free(headers);
 
         if (estructura_ruta == NULL)
                 not_found(response);
+
 
         if (estructura_ruta != NULL)
                 estructura_ruta->funcion(request, response, estructura_ruta->aux);
 
         free_request(request);
         
-
         return NULL;
 }
 

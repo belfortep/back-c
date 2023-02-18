@@ -1,7 +1,7 @@
-#ifndef RUTAS_H_
-#define RUTAS_H_
+#ifndef ROUTES_H_
+#define ROUTES_H_
 
-#include "hash.h"
+#include "../data_structures/data_structures.h"
 #include <jansson.h>
 typedef enum { GET, POST, PUT, DELETE } http_header;
 typedef enum { OK = 200, CREATED = 201, NO_CONTENT = 204, BAD_REQUEST = 400, UNAUTHORIZED = 401, FORBIDDEN = 403, NOT_FOUND = 404, IM_A_TEAPOT = 418, INTERNAL_SERVER_ERROR = 500 } http_status;
@@ -30,4 +30,4 @@ response_t *set_data(response_t *response, char *data);
 response_t *set_data_json(response_t *response, json_t *json_data);
 
 
-#endif // RUTAS_H_
+#endif // ROUTES_H_

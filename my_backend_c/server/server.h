@@ -1,7 +1,8 @@
 #ifndef SERVER_H_
 #define SERVER_H_
 
-#include "hash.h"
+#include "../data_structures/data_structures.h"
+#include "../router/routes.h"
 #include <stdint.h>
 
 int iniciar_server(uint16_t port, hash_t *rutas);
