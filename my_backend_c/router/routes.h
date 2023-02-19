@@ -8,7 +8,7 @@ typedef enum { OK = 200, CREATED = 201, NO_CONTENT = 204, BAD_REQUEST = 400, UNA
 
 typedef struct request{
         json_t *body;
-        hash_t *params;
+        char params[256];
         hash_t *cookies;
         hash_t *query;
 } request_t;
@@ -28,6 +28,7 @@ void *send_response(response_t *response);
 response_t *set_status(response_t *response, http_status status);
 response_t *set_data(response_t *response, char *data);
 response_t *set_data_json(response_t *response, json_t *json_data);
+char *get_param(request_t *request);
 
 
 #endif // ROUTES_H_

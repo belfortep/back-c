@@ -79,7 +79,7 @@ void *not_found(response_t *response)
 }
 
 
-int get_url_and_method(char *headers, char *route_url, char *method)
+int get_url_and_method(char *headers, char *route_url, char *method, char *possible_param)
 {
         char *header = strtok(headers, " ");
         
@@ -96,6 +96,16 @@ int get_url_and_method(char *headers, char *route_url, char *method)
                 header = strtok(NULL, " ");     
                 header_parse_counter++;
         }       //      
+
+        char temp[MAXLINE/16];
+        strcpy(temp, route_url);
+        char *token = strtok(temp, "/");
+        while (token != NULL) {
+                if (token != NULL) 
+                        strcpy(possible_param, token);
+                
+                token = strtok(NULL, "/");
+        }
 
         return 0;
 }
@@ -152,9 +162,6 @@ request_t *create_request(json_t *body)
 
 void free_request(request_t *request)
 {
-        //hash_destruir(request->cookies);
-        //hash_destruir(request->params);
-        //hash_destruir(request->query);
         free(request);
 }
 
@@ -171,8 +178,11 @@ void *handle_connection(void *client_pointer, void *rutas)
         
         char *method = malloc(sizeof(char) * (MAXLINE/16));
         char *route_url= malloc(sizeof(char) * (MAXLINE/16));
+        char *possible_param = malloc(sizeof(char) * (MAXLINE/16));
+        memset(possible_param , 0, (MAXLINE/16));
         if (!method || !route_url)
                 return NULL;
+        printf("request_data %s \n", request_data);
 
         char *token = strtok(request_data, "{");       
         if (!token) 
@@ -185,42 +195,45 @@ void *handle_connection(void *client_pointer, void *rutas)
         memset(headers, 0, MAXLINE);
         strcpy(headers, token);
         token = strtok(NULL, "{");     
-        get_url_and_method(headers, route_url, method);
+        get_url_and_method(headers, route_url, method, possible_param);
         
-        char *la_ruta = malloc(sizeof(char) * (MAXLINE/8));    
-        memset(la_ruta, 0, (MAXLINE/8));
+        for (size_t i = strlen(route_url); i > 0; i--) {
+                if (route_url[i] == '/')
+                        break;
+                route_url[i] = '\0';
+        }
+        strcat(route_url, ":id");
+
+
+        char la_ruta[512];
+        memset(la_ruta, 0, 512);
         strcat(la_ruta, method);        
         strcat(la_ruta, route_url);
-        //idea para obtener el :id, digamos que en route_url yo voy a tener algo del estilo
-        //      /api/users/123456
-        //      puedo ir haciendo strtok con los / hasta llegar al ultimo (que ese seria el :id)
-        //      pero, y si me llega algo que no tiene un :id? digamos me llega /api/users
-        //      y ese tambien es un endpoint valido, tipo digamos tengo las rutas GET /api/users y la GET /api/users/:id
-        //      y tambien esta la ruta GET /api
-        //      ahora, como verifico?
-        //      quiza cambiar algo en la implementacion del hash, para verificar si tengo un : al insertar la clave?
-        //por como esta ahora, si yo guardo un /user/:id
-        //el hacer hash_obtener solo acepta si tenia un :id
-        //AH, una idea, yo tengo mi /api/users, con mi idea de los strtok voy a obtener "users"
-        //y si guardo un entero en el hash, tipo la estructura ruta guarde cuantas "/" tiene en el nombre
-        //entonces yo cuando obtenga de por ejemplo
-        // /api/users   aca pase 2 "/"
-        //en cambio cuando agarre de algo tipo  /api/users/un_id
-        //aca pase por 3 "/", por lo tanto la que quiero es la de :id, creo que tiene sentido y puedo implementarlo
-        // asi se, se tiene 2 "/" es el normal, si tiene 3 es el :id
-        //osea, en hash obtener tengo que verificar el string y la cantidad de / que pase?
-        estructura_ruta_t *estructura_ruta = hash_obtener(rutas, la_ruta);
-
         response_t *response = create_response(client_socket);
         request_t *request = create_request(convert_to_json(token));
+        estructura_ruta_t *estructura_ruta;
+        for (int i = 0; i < 2; i++) {
+                estructura_ruta = hash_obtener(rutas, la_ruta);
+                printf("la_ruta es : %s \n", la_ruta);
+                if (estructura_ruta != NULL) {
+                        if (i == 0) 
+                                strcpy(request->params, possible_param);
+                        
+                        break;
+                }
+                if (la_ruta != NULL)
+                        strtok(la_ruta, ":");
+
+                strcat(la_ruta, possible_param);
+        }
 
         if (!response || !request)
                 return NULL;
         
-        free(la_ruta);
         free(route_url);
         free(method);
         free(headers);
+        free(possible_param);
 
         if (estructura_ruta == NULL)
                 not_found(response);
@@ -274,4 +287,9 @@ response_t *set_data_json(response_t *response, json_t *json_data)
 {
         response->json_data = json_dumps(json_data, JSON_ENSURE_ASCII);
         return response;
+}
+
+char *get_param(request_t *request) 
+{
+        return request->params;
 }

@@ -1,7 +1,6 @@
-
 #include "my_backend_c/server/server.h"
 #include "stdio.h"
-#define PORT 5000
+#define PORT 4000
 
 void *funcion_de_ruta(request_t *request, response_t *response, void *aux)
 {
@@ -42,6 +41,7 @@ void *funcion_post(request_t *request, response_t *response, void *aux)
 void *funcion_usuario(request_t *request, response_t *response, void *aux)
 {
         response = set_status(response, OK);
+        response = set_data(response, get_param(request));
 
         return send_response(response);
 }
