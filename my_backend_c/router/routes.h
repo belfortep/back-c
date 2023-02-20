@@ -10,7 +10,7 @@ typedef struct request{
         json_t *body;
         char params[256];
         hash_t *cookies;
-        hash_t *query;
+        json_t *query;
 } request_t;
 
 typedef struct response{

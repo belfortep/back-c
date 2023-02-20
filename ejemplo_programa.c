@@ -6,6 +6,9 @@ void *funcion_de_ruta(request_t *request, response_t *response, void *aux)
 {
         response = set_status(response, OK);
         response = set_data(response, "data");
+        json_t *data_query = json_object_get(request->query, "qlo");
+        if (data_query)
+                response = set_data(response, (char *)json_string_value(data_query));
 
         return send_response(response);
 }
@@ -42,6 +45,11 @@ void *funcion_usuario(request_t *request, response_t *response, void *aux)
 {
         response = set_status(response, OK);
         response = set_data(response, get_param(request));
+        json_t *data_query = json_object_get(request->query, "qlo");
+        if (data_query) {
+                json_t *manda_info = json_pack("{ss}", "foo", (char *)json_string_value(data_query));
+                response = set_data_json(response, manda_info);
+        }
 
         return send_response(response);
 }
