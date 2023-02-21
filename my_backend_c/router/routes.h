@@ -9,7 +9,6 @@ typedef enum { OK = 200, CREATED = 201, NO_CONTENT = 204, BAD_REQUEST = 400, UNA
 typedef struct request{
         json_t *body;
         char params[256];
-        hash_t *cookies;
         json_t *query;
 } request_t;
 

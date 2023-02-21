@@ -1,12 +1,12 @@
 #include "error_management.h"
-
+#include <stdbool.h>
 //simplemente un placeholder
 
 
 int maneja_error(ssize_t valor)
 {
         if (valor < 0)
-                return -1;
+                return true;
         
-        return 1;
+        return false;
 }

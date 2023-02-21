@@ -5,11 +5,9 @@
 void *funcion_de_ruta(request_t *request, response_t *response, void *aux)
 {
         response = set_status(response, OK);
-        response = set_data(response, "data");
-        json_t *data_query = json_object_get(request->query, "qlo");
-        if (data_query)
-                response = set_data(response, (char *)json_string_value(data_query));
-
+        json_t *info = json_pack("{ssss}", "foo", "lorem", "bar", "ipsum");
+        response = set_data_json(response, info);
+        json_decref(info);
         return send_response(response);
 }
 void *funcion_de_otra_ruta(request_t *request, response_t *response, void *aux)
@@ -46,8 +44,9 @@ void *funcion_usuario(request_t *request, response_t *response, void *aux)
         response = set_status(response, OK);
         response = set_data(response, get_param(request));
         json_t *data_query = json_object_get(request->query, "qlo");
-        if (data_query) {
-                json_t *manda_info = json_pack("{ss}", "foo", (char *)json_string_value(data_query));
+        json_t *data = json_object_get(request->body, "clave1");
+        if (data_query && data) {
+                json_t *manda_info = json_pack("{ssss}", "foo", (char *)json_string_value(data_query), "bar", (char *)json_string_value(data));
                 response = set_data_json(response, manda_info);
         }
 

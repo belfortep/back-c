@@ -18,6 +18,16 @@
 #include "../error_management/error_management.h"
 #include "routes.h"
 #define MAXLINE 4096
+#define HEADER_OK "HTTP/1.1 200 OK\n"
+#define HEADER_CREATED "HTTP/1.1 201 CREATED\n"
+#define HEADER_NO_CONTENT "HTTP/1.1 204 NO-CONTENT\n"
+#define HEADER_BAD_REQUEST "HTTP/1.1 400 BAD-REQUEST\n"
+#define HEADER_UNAUTHORIZED "HTTP/1.1 401 UNAUTHORIZED\n"
+#define HEADER_FORBIDDEN "HTTP/1.1 403 FORBIDDEN\n"
+#define HEADER_NOT_FOUND "HTTP/1.1 404 NOT-FOUND\n"
+#define HEADER_IM_A_TEAPOT "HTTP/1.1 418 IM-A-TEAPOT\n"
+#define HEADER_INTERNAL_SERVER_ERROR "HTTP/1.1 500 INTERNAL-SERVER-ERROR\n"
+
 
 
 typedef void *(*funcion_de_ruta)(request_t *request, response_t *response, void *aux);
@@ -28,52 +38,61 @@ typedef struct estructura_ruta
         void *aux;
 } estructura_ruta_t;
 
+void free_response(response_t *response)
+{
+        if (!response)
+                return;
+
+        close(response->client_socket);
+
+        if (response->json_data)
+                free(response->json_data);
+        
+        
+        free(response);
+}
+
+
 void *send_response(response_t *response)
 {
         char *response_data = malloc(sizeof(char) * MAXLINE);
 
-        if (response->status == 200)    //mejorar esta parte de los response
-        {
-                snprintf(response_data, MAXLINE, "HTTP/1.0 200 OK \r\n\r\n ");
-        }
+        if (response->status == OK)      
+                snprintf(response_data, MAXLINE, HEADER_OK);
+        if (response->status == CREATED)      
+                snprintf(response_data, MAXLINE, HEADER_CREATED);
+        if (response->status == NO_CONTENT)      
+                snprintf(response_data, MAXLINE, HEADER_NO_CONTENT);
+        if (response->status == BAD_REQUEST)      
+                snprintf(response_data, MAXLINE, HEADER_BAD_REQUEST);
+        if (response->status == UNAUTHORIZED)      
+                snprintf(response_data, MAXLINE, HEADER_UNAUTHORIZED);
+        if (response->status == FORBIDDEN)      
+                snprintf(response_data, MAXLINE, HEADER_FORBIDDEN);
+        if (response->status == NOT_FOUND)      
+                snprintf(response_data, MAXLINE, HEADER_NOT_FOUND);
+        if (response->status == IM_A_TEAPOT)      
+                snprintf(response_data, MAXLINE, HEADER_IM_A_TEAPOT);
+        if (response->status == INTERNAL_SERVER_ERROR)      
+                snprintf(response_data, MAXLINE, HEADER_INTERNAL_SERVER_ERROR);
+                
+        if (response->json_data != NULL)
+                strcat(response_data, "Access-Control-Allow-Origin: *\nConnection: Keep-alive\nContent-Type: application/json; charset=UTF-8\nKeep-Alive: timeout=5, max=999\r\n\r\n");
 
-        if (response->data != NULL && response->json_data != NULL) {
-                strcat(response_data, response->data);
-                strcat(response_data, "\n");
-                strcat(response_data, response->json_data);
-        }
-        else if (response->data != NULL) {
+        if (response->json_data == NULL && response->status == NOT_FOUND)
+                snprintf(response_data, MAXLINE, "HTTP/1.1 404 NOT-FOUND\r\n\r\nNOT-FOUND");
+
+        if (response->data != NULL) {
                 strcat(response_data, response->data);
         } else if (response->json_data != NULL) {
                 strcat(response_data, response->json_data);
         }
 
-        //if(maneja_error(write(response->client_socket, response_data, strlen(response_data)))) {
-        //}
-                if(write(response->client_socket, response_data, strlen(response_data))){
-
-                }
-        close(response->client_socket);
-        free(response);
-        free(response_data);
-        return NULL;
-}
-
-void *not_found(response_t *response)
-{
-        char *response_data = malloc(sizeof(char) * MAXLINE);
-
-        snprintf(response_data, MAXLINE, "HTTP/1.0 404 NOT FOUND \r\n\r\nNOT FOUND PAGE");
-
-        //if(maneja_error(write(response->client_socket, response_data, strlen(response_data)))){
-
-        //}
-        if(write(response->client_socket, response_data, strlen(response_data))){
-
+        if(maneja_error(write(response->client_socket, response_data, strlen(response_data)))) {
+                printf("rompimos todo XD");
         }
-        close(response->client_socket);
-        //memset(response_data, 0, MAXLINE);
-        free(response);
+
+        free_response(response);
         free(response_data);
         return NULL;
 }
@@ -138,7 +157,7 @@ json_t *get_url_and_method(char *headers, char *route_url, char *method, char *p
         
 
                 strcat(convertilo_a_json, "}");
-                printf("%s \n", convertilo_a_json);
+                //printf("%s \n", convertilo_a_json);
                 json_query_param = json_loads(convertilo_a_json, 0, &error);
         }
 
@@ -148,7 +167,7 @@ json_t *get_url_and_method(char *headers, char *route_url, char *method, char *p
                 if (token != NULL) 
                         strcpy(possible_param, token);
                 
-                printf("el token es : %s \n", token);
+                //printf("el token es : %s \n", token);
                 token = strtok(NULL, "/");
         }
 
@@ -201,6 +220,9 @@ request_t *create_request(json_t *body, json_t *query)
         if (!request)
                 return NULL;
 
+        request->body = NULL;
+        request->query = NULL;
+
         if (body != NULL) 
                 request->body = body;
         
@@ -215,10 +237,10 @@ void free_request(request_t *request)
         if (!request)
                 return;
 
-        if (request->body) 
+        if (request->body != NULL) 
                 json_decref(request->body);
-        if (request->query)
-                json_decref(request->query);
+        if (request->query != NULL)
+                json_decref(request->query);    //como que no lo libera bien, tendria que ver que porque no ._.XD
         
         free(request);
 }
@@ -228,7 +250,7 @@ void *handle_connection(void *client_pointer, void *rutas)
         int client_socket = *((int *)client_pointer);
         free(client_pointer);
 
-        char request_data[MAXLINE];     //veamos ahora si no rompe el stack asi (?
+        char request_data[MAXLINE];
         memset(request_data, 0, MAXLINE);       
         
         if (read(client_socket, request_data, MAXLINE) < 0)
@@ -240,7 +262,7 @@ void *handle_connection(void *client_pointer, void *rutas)
         memset(possible_param , 0, (MAXLINE/16));
         if (!method || !route_url)
                 return NULL;
-        printf("request_data %s \n", request_data);
+        //printf("request_data %s \n", request_data);
 
         char *token = strtok(request_data, "{");       
         if (!token) 
@@ -270,13 +292,13 @@ void *handle_connection(void *client_pointer, void *rutas)
         strcat(la_ruta, method);        
         strcat(la_ruta, route_url);
         response_t *response = create_response(client_socket);
-        request_t *request = create_request(convert_to_json(token), json_query_param);  //valgrind dice que esto esta sin inicializar aveces?
+        request_t *request = create_request(convert_to_json(token), json_query_param);  //valgrind dice que esto esta sin inicializar?
         estructura_ruta_t *estructura_ruta;
         possible_param = strtok(possible_param, "?");
         for (int i = 0; i < 2; i++) {
                 estructura_ruta = hash_obtener(rutas, la_ruta);
-                printf("la_ruta es : %s \n", la_ruta);
-                printf("possible param es : %s \n", possible_param);
+                //printf("la_ruta es : %s \n", la_ruta);
+                //printf("possible param es : %s \n", possible_param);
                 if (estructura_ruta != NULL) {
                         if (i == 0) 
                                 strcpy(request->params, possible_param);
@@ -288,7 +310,7 @@ void *handle_connection(void *client_pointer, void *rutas)
                         
                 
                 
-                printf("possible param es : %s \n", possible_param);
+                //printf("possible param es : %s \n", possible_param);
                 
                 strcat(la_ruta, possible_param);
         }
@@ -301,8 +323,10 @@ void *handle_connection(void *client_pointer, void *rutas)
         free(headers);
         free(possible_param);
 
-        if (estructura_ruta == NULL)
-                not_found(response);
+        if (estructura_ruta == NULL) {
+                response->status = NOT_FOUND;
+                send_response(response);
+        }
 
 
         if (estructura_ruta != NULL)
@@ -315,7 +339,7 @@ void *handle_connection(void *client_pointer, void *rutas)
 
 void *crear_ruta(hash_t *hash, char *nombre_ruta, void *(*f)(request_t *request, response_t *response, void *aux), void *aux, http_header tipo) //tipo, por si es get, post, put, etc
 {
-        estructura_ruta_t *estructura_ruta = malloc(sizeof(estructura_ruta_t)); // donde te libero? XD
+        estructura_ruta_t *estructura_ruta = malloc(sizeof(estructura_ruta_t));
         estructura_ruta->funcion = f;
         estructura_ruta->aux = aux;
         char nombre[MAXLINE];
