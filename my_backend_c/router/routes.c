@@ -240,7 +240,7 @@ void free_request(request_t *request)
         if (request->body != NULL) 
                 json_decref(request->body);
         if (request->query != NULL)
-                json_decref(request->query);    //como que no lo libera bien, tendria que ver que porque no ._.XD
+                json_decref(request->query);
         
         free(request);
 }

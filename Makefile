@@ -9,4 +9,4 @@ valgrind-compilar: compilar
 	valgrind $(VALGRIND_FLAGS) ./server 2>&1
 
 compilar: my_backend_c/data_structures/*.c my_backend_c/router/*.c my_backend_c/server/*.c my_backend_c/error_management/*.c ejemplo_programa.c
-	$(CC) $(CFLAGS) my_backend_c/data_structures/*.c my_backend_c/router/*.c my_backend_c/server/* my_backend_c/error_management/*.c ejemplo_programa.c -ljansson -o server 2>&1
+	$(CC) $(CFLAGS) my_backend_c/data_structures/*.c my_backend_c/router/*.c my_backend_c/server/* my_backend_c/error_management/*.c my_backend_c/database/*.c ejemplo_programa.c -ljansson `mysql_config --cflags --libs` -o server 2>&1
