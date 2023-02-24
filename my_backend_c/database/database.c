@@ -3,22 +3,62 @@
 #include <stdlib.h>
 #include <jansson.h>
 #include <string.h>
+#define ERROR -1
+#define SUCCESS 0
+#define MAX_QUERY_SIZE 4096
+#define SMALL_QUERY_SIZE 256
 
+
+
+MYSQL_RES *get_by_id(MYSQL *connection, char *table_name, char *id)
+{
+        if (!connection || !table_name)
+                return NULL;
+        
+        char query[SMALL_QUERY_SIZE];
+        sprintf(query, "SELECT * FROM ");
+        strcat(query, table_name);
+        strcat(query, " WHERE id = ");
+        strcat(query, id);
+
+        if (mysql_query(connection, query))
+                return NULL;
+        
+        MYSQL_RES *result = mysql_store_result(connection);
+        if (!result)
+                return NULL;
+
+        return result;
+}
+
+int delete_by_id(MYSQL *connection, char *table_name, char *id)
+{
+        char query[SMALL_QUERY_SIZE];
+        sprintf(query, "DELETE FROM ");
+        strcat(query, table_name);
+        strcat(query, " WHERE id = ");
+        strcat(query, id);
+
+        if (mysql_query(connection, query))
+                return ERROR;
+
+        return SUCCESS;
+}
 
 
 int create_db(MYSQL *connection, char *db_name)
 {
         if (!connection || !db_name)
-                return -1;
+                return ERROR;
 
-        char query[4096];
+        char query[SMALL_QUERY_SIZE];
         sprintf(query, "CREATE DATABASE ");
         strcat(query, db_name);
 
         if (mysql_query(connection, query))
-                return -1;
+                return ERROR;
         
-        return 0;
+        return SUCCESS;
 }
 
 
@@ -27,7 +67,7 @@ MYSQL_RES *get_all(MYSQL *connection, char *table_name)
         if (!connection || !table_name)
                 return NULL;
         
-        char query[4096];
+        char query[SMALL_QUERY_SIZE];
         sprintf(query, "SELECT * FROM ");
         strcat(query, table_name);
 
@@ -41,23 +81,19 @@ MYSQL_RES *get_all(MYSQL *connection, char *table_name)
         return result;
 }
 
-
-
-
-
 int insert_into(MYSQL *connection, char *table_name, json_t *object)
 {
         if (!connection || !table_name || !object)
-                return -1;
+                return ERROR;
         
-        char query[4096];
+        char query[MAX_QUERY_SIZE];
         const char *key;
         json_t *value;
-        char all_keys[4096];
-        memset(all_keys, 0, 4096);
-        char all_values[4096];
-        memset(all_values, 0, 4096);
-        char fake_value[256];
+        char all_keys[MAX_QUERY_SIZE];
+        all_keys[0] = '\0';
+        char all_values[MAX_QUERY_SIZE];
+        all_values[0] = '\0';   //funcionara con esto en vez de memset?
+        char fake_value[SMALL_QUERY_SIZE];
 
         json_object_foreach(object, key, value) {
                 if (json_is_array(value)) {     //creo que mysql no acepta arrays (?
@@ -95,9 +131,20 @@ int insert_into(MYSQL *connection, char *table_name, json_t *object)
         query[strlen(query) -1] = '\0';
         strcat(query, ")");
         if (mysql_query(connection, query))
-                return -1;
+                return ERROR;
         
-        return 0;
+        return SUCCESS;
+}
+
+int update_by_id(MYSQL *connection, char *table_name, char *id, json_t *object)
+{
+        //trucho? quiza, pero que se escribio rapido, no me lo niega nadie XD
+        if (delete_by_id(connection, table_name, id) == ERROR)
+                return ERROR;       
+        if (insert_into(connection, table_name, object) == ERROR)
+                return ERROR;
+
+        return SUCCESS;
 }
 
 
@@ -105,7 +152,7 @@ int insert_into(MYSQL *connection, char *table_name, json_t *object)
 MYSQL *connect_db(char *host, char *user, char *password, char *db_name)
 {
         if (!host || !user || !password)
-                return -1;
+                return NULL;
 
         MYSQL *connection = mysql_init(NULL);
 

@@ -3,54 +3,51 @@
 #include "my_backend_c/database/database.h"
 #define PORT 4000
 
-void *funcion_de_ruta(request_t *request, response_t *response, void *aux)
+void *get_users(request_t *request, response_t *response, void *aux)
 {
         response = set_status(response, OK);
-        json_t *info = json_pack("{ssss}", "foo", "lorem", "bar", "ipsum");
-        response = set_data_json(response, info);
-        json_decref(info);
+        //MYSQL_RES *result = get_all(aux, "cars");     despues vemos bien que hacer con esto, pero es problema del usuario (?
+        
+
+
         return send_response(response);
 }
-void *funcion_de_otra_ruta(request_t *request, response_t *response, void *aux)
+
+void *get_user(request_t *request, response_t *response, void *aux)
 {
+        response = set_status(response, OK);
+        //MYSQL_RES *result = get_by_id(aux, "cars", request->params);
+
+        return send_response(response);
+}
+
+void *create_user(request_t *request, response_t *response, void *aux)
+{
+        insert_into(aux, "cars", request->body);
+        response = set_status(response, CREATED);
+        response = set_data_json(response, request->body);
+
+        return send_response(response);
+}
+
+void *delete_user(request_t *request, response_t *response, void *aux)
+{
+        delete_by_id(aux, "cars", request->params);
+        response = set_status(response, OK);
+        response = set_data(response, "OK");
+
+        return send_response(response);
+}
+
+void *update_user(request_t *request, response_t *response, void *aux)
+{
+        update_by_id(aux, "cars", request->params, request->body);
         response = set_status(response, OK);
         response = set_data_json(response, request->body);
-        insert_into(aux, "cars", request->body);
-
 
         return send_response(response);
 }
 
-void *funcion_info(request_t *request, response_t *response, void *aux)
-{
-        response = set_status(response, OK);
-        response = set_data(response, "ola que tal");
-        
-        return send_response(response);
-}
-
-void *funcion_post(request_t *request, response_t *response, void *aux)
-{
-        response = set_status(response, OK);
-        response = set_data(response, "ola solo mirame en post");
-        
-        return send_response(response);
-}
-
-
-void *funcion_usuario(request_t *request, response_t *response, void *aux)
-{
-        response = set_status(response, OK);
-        response = set_data(response, get_param(request));
-        json_t *data_query = json_object_get(request->query, "qlo");
-        json_t *data = json_object_get(request->body, "clave1");
-        if (data_query && data) {
-                json_t *manda_info = json_pack("{ssss}", "foo", (char *)json_string_value(data_query), "bar", (char *)json_string_value(data));
-                response = set_data_json(response, manda_info);
-        }
-
-        return send_response(response);
-}
 
 int main()
 {
@@ -59,14 +56,13 @@ int main()
         char *password = "34klq*";
         char *db = "testdb";
         hash_t *hash = hash_crear(10);        //cambiar que no necesite el tamanio inicial, cambiar nombre a "routes_t" o algo asi
-        int numero = 200;
         MYSQL *connection = connect_db(host, user, password, db);
         
-        crear_ruta(hash, "/index", funcion_de_ruta, NULL, GET);
-        crear_ruta(hash, "/sarasa", funcion_de_otra_ruta, connection, POST);
-        crear_ruta(hash, "/api/info", funcion_info, &numero, PUT);
-        crear_ruta(hash, "/ola", funcion_post, NULL, DELETE);
-        crear_ruta(hash, "/user/:id", funcion_usuario, NULL, GET);
+        crear_ruta(hash, "/users", NULL, connection, GET);
+        crear_ruta(hash, "/user/:id", NULL, connection, GET);
+        crear_ruta(hash, "/user", NULL, connection, POST);
+        crear_ruta(hash, "/user/:id", NULL, connection, DELETE);
+        crear_ruta(hash, "/user/:id", NULL, connection, PUT);
         
         iniciar_server(PORT, hash);
         hash_destruir(hash);
