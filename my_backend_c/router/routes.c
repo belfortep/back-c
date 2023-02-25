@@ -18,6 +18,7 @@
 #include "../error_management/error_management.h"
 #include "routes.h"
 #define MAXLINE 4096
+#define SMALL_MAXLINE 256
 #define HEADER_OK "HTTP/1.1 200 OK\n"
 #define HEADER_CREATED "HTTP/1.1 201 CREATED\n"
 #define HEADER_NO_CONTENT "HTTP/1.1 204 NO-CONTENT\n"
@@ -42,7 +43,7 @@ void free_response(response_t *response)
 {
         if (!response)
                 return;
-
+        
         close(response->client_socket);
 
         if (response->json_data)
@@ -51,7 +52,6 @@ void free_response(response_t *response)
         
         free(response);
 }
-
 
 void *send_response(response_t *response)
 {
@@ -89,7 +89,7 @@ void *send_response(response_t *response)
         }
 
         if(maneja_error(write(response->client_socket, response_data, strlen(response_data)))) {
-                printf("rompimos todo XD");
+                printf("rompimos");
         }
 
         free_response(response);
@@ -98,6 +98,10 @@ void *send_response(response_t *response)
 }
 
 
+
+
+
+//----------------------------
 json_t *get_url_and_method(char *headers, char *route_url, char *method, char *possible_param)
 {
         char *header = strtok(headers, " ");
@@ -116,32 +120,31 @@ json_t *get_url_and_method(char *headers, char *route_url, char *method, char *p
                 header_parse_counter++;
         }       //      
 
-        char temp[MAXLINE/16];
+        char temp[SMALL_MAXLINE];
         strcpy(temp, route_url);
         
 
 
 
 
-        char todos_los_params[256];
+        char todos_los_params[SMALL_MAXLINE];
         todos_los_params[0] = '\0';
         sscanf(route_url, "%*[^?]%s", todos_los_params);//messirve
         json_t *json_query_param = NULL;
         json_error_t error;
         if (todos_los_params[0] != '\0') {
-                char convertilo_a_json[256];
-                memset(convertilo_a_json, 0, 256);
-
+                char convertilo_a_json[SMALL_MAXLINE];
 
 
                 convertilo_a_json[0] = '{';
                 convertilo_a_json[1] = '\n';
+                convertilo_a_json[2] = '\0';
 
 
                 char *tuki = strtok(todos_los_params, "?");
                 tuki = strtok(tuki, "&");
-                char claves[256];
-                char valores[256];
+                char claves[SMALL_MAXLINE];
+                char valores[SMALL_MAXLINE];
                 while (tuki) {
                         sscanf(tuki, "%[^=]=%[^=]", claves, valores);
                         strcat(claves, "\"");        
@@ -245,7 +248,56 @@ void free_request(request_t *request)
         free(request);
 }
 
-void *handle_connection(void *client_pointer, void *rutas)
+
+
+void reduce_route_url(char *route_url)
+{       
+        for (size_t i = strlen(route_url); i > 0; i--) {
+                if (route_url[i] == '/')
+                        break;
+                route_url[i] = '\0';
+        }
+        strcat(route_url, ":id");
+}
+
+char *get_route_of_hash(char *method, char *route_url)
+{
+        char *route_of_hash = malloc(sizeof(char) * (SMALL_MAXLINE * 2));
+
+        if (!route_of_hash)
+                return NULL;
+
+        strcpy(route_of_hash, method);        
+        strcat(route_of_hash, route_url);
+
+        return route_of_hash;
+}
+
+estructura_ruta_t *get_route(hash_t *routes, request_t *request, char *route_of_hash, char *possible_param)
+{
+        if (!routes || !request || !route_of_hash || !possible_param)
+                return NULL;
+
+        possible_param = strtok(possible_param, "?");
+        estructura_ruta_t *estructura_ruta;
+        for (int i = 0; i < 2; i++) {
+                estructura_ruta = hash_obtener(routes, route_of_hash);
+                if (estructura_ruta != NULL) {
+                        if (i == 0) 
+                                strcpy(request->params, possible_param);
+                        
+                        break;
+                }
+                if (route_of_hash != NULL) 
+                        strtok(route_of_hash, ":");
+                        
+                strcat(route_of_hash, possible_param);
+        }
+
+        return estructura_ruta;
+}
+
+void *handle_connection(void *client_pointer, void *routes)
 {
         int client_socket = *((int *)client_pointer);
         free(client_pointer);
@@ -256,78 +308,35 @@ void *handle_connection(void *client_pointer, void *rutas)
         if (read(client_socket, request_data, MAXLINE) < 0)
                 return NULL;
         
-        char *method = malloc(sizeof(char) * (MAXLINE/16));
-        char *route_url= malloc(sizeof(char) * (MAXLINE/16));
-        char *possible_param = malloc(sizeof(char) * (MAXLINE/16));
-        memset(possible_param , 0, (MAXLINE/16));
-        if (!method || !route_url)
-                return NULL;
-        //printf("request_data %s \n", request_data);
+        char method[SMALL_MAXLINE];
+        char route_url[SMALL_MAXLINE];
+        char possible_param[SMALL_MAXLINE];
+        char headers[MAXLINE];
+        char *token = strtok(request_data, "{");
 
-        char *token = strtok(request_data, "{");       
-        if (!token) 
+        if (!token)
                 return NULL;
 
-        char *headers = malloc(sizeof(char) * MAXLINE);
-        if (!headers)
-                return NULL;
-
-        memset(headers, 0, MAXLINE);
         strcpy(headers, token);
-        token = strtok(NULL, "{");     
+        token = strtok(NULL, "{");
         
         json_t *json_query_param = get_url_and_method(headers, route_url, method, possible_param);
-        
-        
-        for (size_t i = strlen(route_url); i > 0; i--) {
-                if (route_url[i] == '/')
-                        break;
-                route_url[i] = '\0';
-        }
-        strcat(route_url, ":id");
+        reduce_route_url(route_url);
 
-
-        char la_ruta[512];
-        memset(la_ruta, 0, 512);
-        strcat(la_ruta, method);        
-        strcat(la_ruta, route_url);
+        char *route_of_hash = get_route_of_hash(method, route_url);
         response_t *response = create_response(client_socket);
-        request_t *request = create_request(convert_to_json(token), json_query_param);  //valgrind dice que esto esta sin inicializar?
-        estructura_ruta_t *estructura_ruta;
-        possible_param = strtok(possible_param, "?");
-        for (int i = 0; i < 2; i++) {
-                estructura_ruta = hash_obtener(rutas, la_ruta);
-                //printf("la_ruta es : %s \n", la_ruta);
-                //printf("possible param es : %s \n", possible_param);
-                if (estructura_ruta != NULL) {
-                        if (i == 0) 
-                                strcpy(request->params, possible_param);
-                        
-                        break;
-                }
-                if (la_ruta != NULL) 
-                        strtok(la_ruta, ":");
-                        
-                
-                
-                //printf("possible param es : %s \n", possible_param);
-                
-                strcat(la_ruta, possible_param);
-        }
+        request_t *request = create_request(convert_to_json(token), json_query_param);
 
-        if (!response || !request)
+        if (!request || !response || !route_of_hash)
                 return NULL;
-        
-        free(route_url);
-        free(method);
-        free(headers);
-        free(possible_param);
+
+        estructura_ruta_t *estructura_ruta = get_route(routes, request, route_of_hash, possible_param);
+        free(route_of_hash);
 
         if (estructura_ruta == NULL) {
                 response->status = NOT_FOUND;
                 send_response(response);
         }
-
 
         if (estructura_ruta != NULL)
                 estructura_ruta->funcion(request, response, estructura_ruta->aux);
@@ -336,6 +345,8 @@ void *handle_connection(void *client_pointer, void *rutas)
         
         return NULL;
 }
+
+
 
 void *crear_ruta(hash_t *hash, char *nombre_ruta, void *(*f)(request_t *request, response_t *response, void *aux), void *aux, http_header tipo) //tipo, por si es get, post, put, etc
 {
