@@ -29,17 +29,34 @@
 #define HEADER_IM_A_TEAPOT "HTTP/1.1 418 IM-A-TEAPOT\n"
 #define HEADER_INTERNAL_SERVER_ERROR "HTTP/1.1 500 INTERNAL-SERVER-ERROR\n"
 
+struct _request_t{
+        json_t *body;
+        char params[256];
+        json_t *query;
+};
+
+struct _response_t{
+        int status;
+        int client_socket;
+        char *data;
+        char *json_data;
+};
 
 
-typedef void *(*funcion_de_ruta)(request_t *request, response_t *response, void *aux);
+typedef void *(*route_function)(request_t *request, response_t *response, void *aux);
 
-typedef struct estructura_ruta
+typedef struct route_structure
 {
-        funcion_de_ruta funcion;
+        route_function function;
         void *aux;
-} estructura_ruta_t;
+} route_structure_t;
 
-void free_response(response_t *response)
+/*
+ *
+ * Close the socket associated to the response, and free all the memory
+ * 
+ */
+static void free_response(response_t *response)
 {
         if (!response)
                 return;
@@ -52,6 +69,11 @@ void free_response(response_t *response)
         free(response);
 }
 
+/*
+ *
+ * Write into a socket the response, including the headers
+ * 
+ */
 void *send_response(response_t *response)
 {
         if (!response)
@@ -94,7 +116,7 @@ void *send_response(response_t *response)
 
 
         if(maneja_error(write(response->client_socket, response_data, strlen(response_data))))
-                printf("rompimos");
+                printf("oops");
         
 
         free_response(response);
@@ -102,7 +124,12 @@ void *send_response(response_t *response)
         return NULL;
 }
 
-void get_url_and_method(char *headers, char *method, char *route_url)
+/*
+ *
+ * Separate the route_url and method of a header
+ * 
+ */
+static void get_url_and_method(char *headers, char *method, char *route_url)
 {
         if (!headers || !method || !route_url)
                 return;
@@ -124,7 +151,12 @@ void get_url_and_method(char *headers, char *method, char *route_url)
         }
 }
 
-json_t *get_query_param(char *all_the_params, json_error_t error)
+/*
+ *
+ * Get the query param of a route and convert it to json_t
+ * 
+ */
+static json_t *get_query_param(char *all_the_params, json_error_t error)
 {
         if (!all_the_params)
                 return NULL;
@@ -157,7 +189,8 @@ json_t *get_query_param(char *all_the_params, json_error_t error)
         return json_loads(creating_json, 0, &error);
 }
 
-void get_possible_param(char *temp, char *possible_param)
+
+static void get_possible_param(char *temp, char *possible_param)
 {
         if (!temp || !possible_param)
                 return;
@@ -172,7 +205,12 @@ void get_possible_param(char *temp, char *possible_param)
         }
 }       
 
-json_t *parse_request(char *headers, char *route_url, char *method, char *possible_param)
+/*
+ *
+ * Parse the request headers to get the route, method, params and query params
+ * 
+ */
+static json_t *parse_request(char *headers, char *route_url, char *method, char *possible_param)
 {
         if (!headers || !route_url || !method || !possible_param)
                 return NULL;
@@ -195,7 +233,12 @@ json_t *parse_request(char *headers, char *route_url, char *method, char *possib
         return json_query_param;
 }
 
-json_t *convert_to_json(char *request_data)
+/*
+ *
+ * Convert a body of a request into json_t
+ * 
+ */
+static json_t *convert_to_json(char *request_data)
 {
         if (!request_data)
                 return NULL;
@@ -215,7 +258,12 @@ json_t *convert_to_json(char *request_data)
         return root;
 }
 
-response_t *create_response(int client_socket)
+/*
+ *
+ * Malloc the memory needed for a response
+ * 
+ */
+static response_t *create_response(int client_socket)
 {
         response_t *response = malloc(sizeof(response_t));
 
@@ -230,7 +278,12 @@ response_t *create_response(int client_socket)
         return response;
 }
 
-request_t *create_request(json_t *body, json_t *query)
+/*
+ *
+ * Malloc the memory needed for a request
+ * 
+ */
+static request_t *create_request(json_t *body, json_t *query)
 {
         request_t *request = malloc(sizeof(request_t));
 
@@ -249,7 +302,12 @@ request_t *create_request(json_t *body, json_t *query)
         return request;
 }
 
-void free_request(request_t *request)
+/*
+ *
+ * Free the memory associated to the request
+ * 
+ */
+static void free_request(request_t *request)
 {
         if (!request)
                 return;
@@ -262,7 +320,12 @@ void free_request(request_t *request)
         free(request);
 }
 
-void reduce_route_url(char *route_url)
+/*
+ *
+ * Inner function needed to get the possible param
+ * 
+ */
+static void reduce_route_url(char *route_url)
 {       
         if (!route_url)
                 return;
@@ -272,10 +335,16 @@ void reduce_route_url(char *route_url)
                         break;
                 route_url[i] = '\0';
         }
+        
         strcat(route_url, ":id");
 }
 
-char *get_route_of_hash(char *method, char *route_url)
+/*
+ *
+ * Make an union of the method and the route_url to pass to the routes hash 
+ * 
+ */
+static char *get_route_of_hash(char *method, char *route_url)
 {
         if (!method || !route_url)
                 return NULL;
@@ -291,16 +360,21 @@ char *get_route_of_hash(char *method, char *route_url)
         return route_of_hash;
 }
 
-estructura_ruta_t *get_route(hash_t *routes, request_t *request, char *route_of_hash, char *possible_param)
+/*
+ *
+ * Try to get the route_structure from the routes hash
+ * 
+ */
+static route_structure_t *get_route(hash_t *routes, request_t *request, char *route_of_hash, char *possible_param)
 {
         if (!routes || !request || !route_of_hash || !possible_param)
                 return NULL;
 
         possible_param = strtok(possible_param, "?");
-        estructura_ruta_t *estructura_ruta;
+        route_structure_t *route_structure;
         for (int i = 0; i < 2; i++) {
-                estructura_ruta = hash_obtener(routes, route_of_hash);
-                if (estructura_ruta != NULL) {
+                route_structure = hash_obtener(routes, route_of_hash);
+                if (route_structure != NULL) {
                         if (i == 0) 
                                 strcpy(request->params, possible_param);
                         
@@ -312,9 +386,14 @@ estructura_ruta_t *get_route(hash_t *routes, request_t *request, char *route_of_
                 strcat(route_of_hash, possible_param);
         }
 
-        return estructura_ruta;
+        return route_structure;
 }
 
+/*
+ *
+ * Receive the connection socket, reads the request and use the associated function to the route in the request
+ * 
+ */
 void *handle_connection(void *client_pointer, void *routes)
 {
         if (!client_pointer || !routes)
@@ -351,49 +430,59 @@ void *handle_connection(void *client_pointer, void *routes)
         if (!request || !response || !route_of_hash)
                 return NULL;
 
-        estructura_ruta_t *estructura_ruta = get_route(routes, request, route_of_hash, possible_param);
+        route_structure_t *route_structure = get_route(routes, request, route_of_hash, possible_param);
         free(route_of_hash);
 
-        if (estructura_ruta == NULL) {
+        if (route_structure == NULL) {
                 response->status = NOT_FOUND;
                 send_response(response);
         }
 
-        if (estructura_ruta != NULL)
-                estructura_ruta->funcion(request, response, estructura_ruta->aux);
+        if (route_structure != NULL)
+                route_structure->function(request, response, route_structure->aux);
 
         free_request(request);
         
         return NULL;
 }
 
-void *crear_ruta(hash_t *hash, char *route_name, void *(*f)(request_t *request, response_t *response, void *aux), void *aux, http_header tipo) //tipo, por si es get, post, put, etc
+/*
+ *
+ * Create a new possible route with the associated http_code
+ * 
+ */
+void *create_route(hash_t *hash, char *route_name, void *(*f)(request_t *request, response_t *response, void *aux), void *aux, http_code type)
 {
         if (!hash || !route_name || !f)
                 return NULL;
 
-        estructura_ruta_t *estructura_ruta = malloc(sizeof(estructura_ruta_t));
-        estructura_ruta->funcion = f;
-        estructura_ruta->aux = aux;
+        route_structure_t *route_structure = malloc(sizeof(route_structure_t));
+        route_structure->function = f;
+        route_structure->aux = aux;
         char route_of_hash[SMALL_MAXLINE];
 
-        if (tipo == GET) {
+        if (type == GET) {
                 strcpy(route_of_hash, "GET");
                 strcat(route_of_hash, route_name);
-        } else if (tipo == POST) {
+        } else if (type == POST) {
                 strcpy(route_of_hash, "POST");
                 strcat(route_of_hash, route_name);
-        } else if (tipo == PUT) {
+        } else if (type == PUT) {
                 strcpy(route_of_hash, "PUT");
                 strcat(route_of_hash, route_name);
-        } else if (tipo == DELETE) {
+        } else if (type == DELETE) {
                 strcpy(route_of_hash, "DELETE");
                 strcat(route_of_hash, route_name);
         }
 
-        return hash_insertar(hash, route_of_hash, estructura_ruta, NULL);
+        return hash_insertar(hash, route_of_hash, route_structure, NULL);
 }
 
+/*
+ *
+ * Set a string data to send as a response
+ * 
+ */
 response_t *set_data(response_t *response, char *data)
 {
         if (!response || !data)
@@ -403,6 +492,11 @@ response_t *set_data(response_t *response, char *data)
         return response;
 }
 
+/*
+ *
+ * Set the status of the response
+ * 
+ */
 response_t *set_status(response_t *response, http_status status)
 {
         if (!response)
@@ -412,6 +506,11 @@ response_t *set_status(response_t *response, http_status status)
         return response;
 }
 
+/*
+ *
+ * Set a json data to send as a response
+ * 
+ */
 response_t *set_data_json(response_t *response, json_t *json_data)
 {
         if (!response || !json_data)
@@ -421,10 +520,23 @@ response_t *set_data_json(response_t *response, json_t *json_data)
         return response;
 }
 
+/*
+ *
+ * get the param of the request if exists
+ * 
+ */
 char *get_param(request_t *request) 
 {
         if (!request)
                 return NULL;
 
         return request->params;
+}
+
+json_t *get_body(request_t *request)
+{
+        if (!request)
+                return NULL;
+
+        return request->body;
 }

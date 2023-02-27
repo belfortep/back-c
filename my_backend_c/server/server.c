@@ -22,13 +22,12 @@
 
 #define SERVER_BACKLOG 100
 #define THREAD_POOL_SIZE 10
-#define TAMANIO_HASH 10
 
 pthread_t thread_pool[THREAD_POOL_SIZE];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t condition_var = PTHREAD_COND_INITIALIZER;
 
-void *thread_function(void *rutas)
+static void *thread_function(void *rutas)
 {
         int *client_pointer;
         while (1)
@@ -46,16 +45,18 @@ void *thread_function(void *rutas)
                         handle_connection(client_pointer, rutas);
                 
         }
+
+        return NULL;
 }
 
-int iniciar_server(uint16_t port, hash_t *rutas)
+int init_server(uint16_t port, hash_t *routes)
 {
         int server_socket, client_socket;
         struct sockaddr_in server_address;
         
 
         for (int i = 0; i < THREAD_POOL_SIZE; i++)
-                pthread_create(&thread_pool[i], NULL, thread_function, rutas);
+                pthread_create(&thread_pool[i], NULL, thread_function, routes);
 
         if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
                 return 0;

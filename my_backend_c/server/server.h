@@ -5,7 +5,7 @@
 #include "../router/routes.h"
 #include <stdint.h>
 
-int iniciar_server(uint16_t port, hash_t *rutas);
+int init_server(uint16_t port, hash_t *routes);
 
 
 #endif // SERVER_H_
