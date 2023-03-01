@@ -33,6 +33,7 @@ struct _request_t{
         json_t *body;
         char params[256];
         json_t *query;
+        json_t *cookies;
 };
 
 struct _response_t{
@@ -203,18 +204,60 @@ static void get_possible_param(char *temp, char *possible_param)
                 
                 token = strtok(NULL, "/");
         }
-}       
+}
+
+static json_t *parse_cookies(char *headers, json_error_t error)
+{
+        char *token = strstr(headers, "Cookie");
+
+        if (!token)
+                return NULL;
+        token = strtok(token, ":");
+
+        token = strtok(NULL, ":");
+        char cookie[4096];
+        sscanf(token, "%[^\n]", cookie);
+
+        printf("%s\n", cookie);
+
+        token = strtok(cookie, " ");
+        char claves[256];
+        char valores[256];
+        char creating_json[4096];
+        creating_json[0] = '{';
+        creating_json[1] = '\n';
+        creating_json[2] = '\0';
+        while (token != NULL) {
+                sscanf(token, "%[^=]=%[^=]", claves, valores);
+                valores[strlen(valores) -1] = '\0';
+                strcat(claves, "\"");        
+                strcat(valores, "\"");
+                strcat(creating_json, "\"");
+                strcat(creating_json, claves);
+                strcat(creating_json, ":");
+                strcat(creating_json, "\"");
+                strcat(creating_json, valores);
+                strcat(creating_json, "\n");
+                token = strtok(NULL, " ");
+        }
+
+        strcat(creating_json, "}");
+
+        return json_loads(creating_json, 0, &error);
+}
 
 /*
  *
  * Parse the request headers to get the route, method, params and query params
  * 
  */
-static json_t *parse_request(char *headers, char *route_url, char *method, char *possible_param)
+static json_t *parse_request(char *headers, char *route_url, char *method, char *possible_param, json_t *cookies)
 {
         if (!headers || !route_url || !method || !possible_param)
                 return NULL;
 
+        json_error_t error;
+        cookies = parse_cookies(headers, error);
         get_url_and_method(headers, method, route_url);
 
         char temp[SMALL_MAXLINE];
@@ -223,7 +266,7 @@ static json_t *parse_request(char *headers, char *route_url, char *method, char 
         all_the_params[0] = '\0';
         sscanf(route_url, "%*[^?]%s", all_the_params);
         json_t *json_query_param = NULL;
-        json_error_t error;
+        
 
         if (all_the_params[0] != '\0')
                 json_query_param = get_query_param(all_the_params, error);
@@ -283,21 +326,16 @@ static response_t *create_response(int client_socket)
  * Malloc the memory needed for a request
  * 
  */
-static request_t *create_request(json_t *body, json_t *query)
+static request_t *create_request(json_t *body, json_t *query, json_t *cookies)
 {
         request_t *request = malloc(sizeof(request_t));
 
         if (!request)
                 return NULL;
 
-        request->body = NULL;
-        request->query = NULL;
-
-        if (body != NULL) 
-                request->body = body;
-        
-        if (query != NULL)
-                request->query = query;
+        request->body = body;
+        request->query = query;
+        request->cookies = cookies;
 
         return request;
 }
@@ -412,7 +450,9 @@ void *handle_connection(void *client_pointer, void *routes)
         char route_url[SMALL_MAXLINE];
         char possible_param[SMALL_MAXLINE];
         char headers[MAXLINE];
+        json_t *cookies = NULL;
         char *token = strtok(request_data, "{");
+        
 
         if (!token)
                 return NULL;
@@ -420,12 +460,12 @@ void *handle_connection(void *client_pointer, void *routes)
         strcpy(headers, token);
         token = strtok(NULL, "{");
         
-        json_t *json_query_param = parse_request(headers, route_url, method, possible_param);
+        json_t *json_query_param = parse_request(headers, route_url, method, possible_param, cookies);
         reduce_route_url(route_url);
 
         char *route_of_hash = get_route_of_hash(method, route_url);
         response_t *response = create_response(client_socket);
-        request_t *request = create_request(convert_to_json(token), json_query_param);
+        request_t *request = create_request(convert_to_json(token), json_query_param, cookies);
 
         if (!request || !response || !route_of_hash)
                 return NULL;
@@ -539,4 +579,12 @@ json_t *get_body(request_t *request)
                 return NULL;
 
         return request->body;
+}
+
+json_t *get_cookies(request_t *request)
+{
+        if (!request)
+                return NULL;
+
+        return request->cookies;
 }
