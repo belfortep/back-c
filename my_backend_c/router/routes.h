@@ -26,4 +26,6 @@ char *get_param(request_t *request);
 
 json_t *get_body(request_t *request);
 
+json_t *get_cookies(request_t *request);
+
 #endif // ROUTES_H_

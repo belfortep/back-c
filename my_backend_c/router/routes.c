@@ -181,10 +181,13 @@ static json_t *get_query_param(char *all_the_params, json_error_t error)
                 strcat(creating_json, ":");
                 strcat(creating_json, "\"");
                 strcat(creating_json, valores);
+                strcat(creating_json, ",");
                 strcat(creating_json, "\n");
                 token = strtok(NULL, "&");
         }
-        
+        size_t len = strlen(creating_json);
+        creating_json[len -2] = '\n';
+        creating_json[len -1] = '\0';
         strcat(creating_json, "}");
         
         return json_loads(creating_json, 0, &error);
@@ -210,26 +213,26 @@ static json_t *parse_cookies(char *headers, json_error_t error)
 {
         char *token = strstr(headers, "Cookie");
 
-        if (!token)
-                return NULL;
         token = strtok(token, ":");
 
         token = strtok(NULL, ":");
-        char cookie[4096];
+        char cookie[MAXLINE];
         sscanf(token, "%[^\n]", cookie);
-
-        printf("%s\n", cookie);
+        cookie[strlen(cookie) -1] = '\0';
 
         token = strtok(cookie, " ");
-        char claves[256];
-        char valores[256];
-        char creating_json[4096];
+        char claves[SMALL_MAXLINE];
+        char valores[SMALL_MAXLINE];
+        char creating_json[MAXLINE];
         creating_json[0] = '{';
         creating_json[1] = '\n';
         creating_json[2] = '\0';
+        size_t len;
         while (token != NULL) {
                 sscanf(token, "%[^=]=%[^=]", claves, valores);
-                valores[strlen(valores) -1] = '\0';
+                len = strlen(valores);
+                if (valores[len -1] == ';')
+                        valores[len -1] = '\0';
                 strcat(claves, "\"");        
                 strcat(valores, "\"");
                 strcat(creating_json, "\"");
@@ -237,11 +240,14 @@ static json_t *parse_cookies(char *headers, json_error_t error)
                 strcat(creating_json, ":");
                 strcat(creating_json, "\"");
                 strcat(creating_json, valores);
+                strcat(creating_json, ",");
                 strcat(creating_json, "\n");
                 token = strtok(NULL, " ");
         }
-
-        strcat(creating_json, "}");
+        len = strlen(creating_json);
+        creating_json[len -2] = '\n';
+        creating_json[len -1] = '}';
+        creating_json[len] = '\0';
 
         return json_loads(creating_json, 0, &error);
 }
@@ -251,13 +257,13 @@ static json_t *parse_cookies(char *headers, json_error_t error)
  * Parse the request headers to get the route, method, params and query params
  * 
  */
-static json_t *parse_request(char *headers, char *route_url, char *method, char *possible_param, json_t *cookies)
+static json_t *parse_request(char *headers, char *route_url, char *method, char *possible_param, json_t **cookies)
 {
         if (!headers || !route_url || !method || !possible_param)
                 return NULL;
 
         json_error_t error;
-        cookies = parse_cookies(headers, error);
+        *cookies = parse_cookies(headers, error);
         get_url_and_method(headers, method, route_url);
 
         char temp[SMALL_MAXLINE];
@@ -354,6 +360,8 @@ static void free_request(request_t *request)
                 json_decref(request->body);
         if (request->query != NULL)
                 json_decref(request->query);
+        if (request->cookies != NULL)
+                json_decref(request->cookies);
         
         free(request);
 }
@@ -452,6 +460,7 @@ void *handle_connection(void *client_pointer, void *routes)
         char headers[MAXLINE];
         json_t *cookies = NULL;
         char *token = strtok(request_data, "{");
+
         
 
         if (!token)
@@ -460,7 +469,7 @@ void *handle_connection(void *client_pointer, void *routes)
         strcpy(headers, token);
         token = strtok(NULL, "{");
         
-        json_t *json_query_param = parse_request(headers, route_url, method, possible_param, cookies);
+        json_t *json_query_param = parse_request(headers, route_url, method, possible_param, &cookies);
         reduce_route_url(route_url);
 
         char *route_of_hash = get_route_of_hash(method, route_url);

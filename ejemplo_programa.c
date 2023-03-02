@@ -1,7 +1,7 @@
 #include "my_backend_c/server/server.h"
 #include "stdio.h"
 //#include "my_backend_c/database/database.h"
-#define PORT 5000
+#define PORT 4000
 
 void *get_users(request_t *request, response_t *response, void *aux)
 {
@@ -18,8 +18,10 @@ void *get_user(request_t *request, response_t *response, void *aux)
 {
         response = set_status(response, OK);
         //response = set_data_json(response, request->body);
-        response = set_data(response, "un usuario");
+        //response = set_data(response, "un usuario");
         //MYSQL_RES *result = get_by_id(aux, "cars", request->params);
+        response = set_data_json(response, get_cookies(request));
+
 
         return send_response(response);
 }
