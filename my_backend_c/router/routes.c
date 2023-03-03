@@ -41,6 +41,8 @@ struct _response_t{
         int client_socket;
         char *data;
         char *json_data;
+        json_t *cookies;
+        json_t *cookies_properties;
 };
 
 
@@ -68,6 +70,22 @@ static void free_response(response_t *response)
                 free(response->json_data);
         
         free(response);
+}
+
+void add_cookies_response(char *request_data, json_t *cookies)
+{
+        const char *key;
+        json_t *value;
+
+        json_object_foreach(cookies, key, value) {
+                if (json_is_string(value)) {
+                        strcat(request_data, "Set-Cookie: ");
+                        strcat(request_data, key);
+                        strcat(request_data, "=");
+                        strcat(request_data, json_string_value(value));
+                        strcat(request_data, "\n");
+                }
+        }
 }
 
 /*
@@ -101,6 +119,9 @@ void *send_response(response_t *response)
         if (response->status == INTERNAL_SERVER_ERROR)      
                 snprintf(response_data, MAXLINE, HEADER_INTERNAL_SERVER_ERROR);
                 
+
+        if (response->cookies)
+                add_cookies_response(response_data, response->cookies);
 
         if (response->data) {
                 strcat(response_data, "Access-Control-Allow-Origin: *\nConnection: Keep-alive\nContent-Type: text/html; charset=UTF-8\nKeep-Alive: timeout=5, max=999\r\n\r\n");
@@ -209,9 +230,17 @@ static void get_possible_param(char *temp, char *possible_param)
         }
 }
 
+/*
+ *
+ * Get the key-value pair of the cookies if exists
+ * 
+ */
 static json_t *parse_cookies(char *headers, json_error_t error)
 {
         char *token = strstr(headers, "Cookie");
+
+        if (!token)
+                return NULL;
 
         token = strtok(token, ":");
 
@@ -320,9 +349,11 @@ static response_t *create_response(int client_socket)
                 return NULL;
 
         response->data = NULL;
+        response->json_data = NULL;
+        response->cookies = NULL;
+        response->cookies_properties = NULL;
         response->status = 404;
         response->client_socket = client_socket;
-        response->json_data = NULL;
 
         return response;
 }
@@ -566,6 +597,18 @@ response_t *set_data_json(response_t *response, json_t *json_data)
                 return NULL;
 
         response->json_data = json_dumps(json_data, JSON_ENSURE_ASCII);
+        return response;
+}
+
+response_t *set_cookies(response_t *response, json_t *cookies, json_t *properties)      
+{
+        if (!response || !cookies)
+                return NULL;
+
+        if (properties)
+                response->cookies_properties = properties;
+
+        response->cookies = cookies;
         return response;
 }
 
