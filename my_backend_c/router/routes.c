@@ -45,6 +45,32 @@ struct _response_t{
         json_t *cookies_properties;
 };
 
+//possible cookies_properties:
+/*
+ *
+ * Expires=Date
+ * Secure;
+ * HttpOnly;
+ * Domain=
+ * Path=
+ * SameSite= (puede ser Strict, Lax o None), si agrego SameSite, es obligatorio tenga "Secure"
+ * Max-Age=Number
+ * Partitioned; es experimental en teoria, por lo que no lo voy a tomar en cuenta (?
+ * 
+ * Ejemplo una cookie
+ * Set-Cookie: Key=Value; HttpOnly; Secure; Domain=un_dominio
+ * Expire y Max-Age son muy similares por lo que entiendo, voy a hacer que solo pueda usar Max-Age xd
+ * 
+ * Entonces voy a aceptar
+ * Max-Age=Un numero en formato string
+ * Secure=Cualquier string
+ * HttpOnly=Cualquier String
+ * Partitioned=Cualquier String
+ * Path=El path que ponga el usuario
+ * Domain=El domain que ponga el usuario
+ * 
+*/
+
 
 typedef void *(*route_function)(request_t *request, response_t *response, void *aux);
 
@@ -69,10 +95,51 @@ static void free_response(response_t *response)
         if (response->json_data)
                 free(response->json_data);
         
+        if (response->cookies_properties)
+                json_decref(response->cookies_properties);
+        
+        
         free(response);
 }
 
-void add_cookies_response(char *request_data, json_t *cookies)
+void add_properties(char *request_data, json_t *properties)
+{
+        if (!properties || !request_data)
+                return;
+        json_t *max_age = json_object_get(properties, "Max-Age");
+        json_t *secure = json_object_get(properties, "Secure");
+        json_t *http_only = json_object_get(properties, "HttpOnly");    
+        json_t *path = json_object_get(properties, "Path");
+        json_t *domain = json_object_get(properties, "Domain");
+        
+        
+        if (max_age) {
+                strcat(request_data, "; ");
+                strcat(request_data, "Max-Age=");
+                strcat(request_data, json_string_value(max_age));
+        }
+        if (path) {
+                strcat(request_data, "; ");
+                strcat(request_data, "Path=");
+                strcat(request_data, json_string_value(path));
+        }
+        if (domain) {
+                strcat(request_data, "; ");
+                strcat(request_data, "Domain=");
+                strcat(request_data, json_string_value(domain));
+        }
+        if (secure) {
+                strcat(request_data, "; ");
+                strcat(request_data, "Secure");
+        }
+        if (http_only) {
+                strcat(request_data, "; ");
+                strcat(request_data, "HttpOnly");
+        }
+
+}
+
+void add_cookies_response(char *request_data, json_t *cookies, json_t *properties)
 {
         const char *key;
         json_t *value;
@@ -83,6 +150,7 @@ void add_cookies_response(char *request_data, json_t *cookies)
                         strcat(request_data, key);
                         strcat(request_data, "=");
                         strcat(request_data, json_string_value(value));
+                        add_properties(request_data, properties);
                         strcat(request_data, "\n");
                 }
         }
@@ -121,7 +189,7 @@ void *send_response(response_t *response)
                 
 
         if (response->cookies)
-                add_cookies_response(response_data, response->cookies);
+                add_cookies_response(response_data, response->cookies, response->cookies_properties);
 
         if (response->data) {
                 strcat(response_data, "Access-Control-Allow-Origin: *\nConnection: Keep-alive\nContent-Type: text/html; charset=UTF-8\nKeep-Alive: timeout=5, max=999\r\n\r\n");

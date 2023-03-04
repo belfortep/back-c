@@ -1,7 +1,7 @@
 #include "my_backend_c/server/server.h"
 #include "stdio.h"
 //#include "my_backend_c/database/database.h"
-#define PORT 5000
+#define PORT 4000
 
 void *get_users(request_t *request, response_t *response, void *aux)
 {
@@ -23,7 +23,8 @@ void *get_user(request_t *request, response_t *response, void *aux)
         json_t *cookies = get_cookies(request);
         if (cookies) {
                 response = set_data_json(response, cookies);
-                response = set_cookies(response, cookies, NULL);
+                json_t *properties = json_pack("{ssssss}", "Max-Age", "100000", "Secure", "no importa que este aca", "HttpOnly", "sarasa");
+                response = set_cookies(response, cookies, properties);
         }
         //response = set_data_json(response, get_cookies(request));
 
