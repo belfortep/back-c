@@ -45,33 +45,6 @@ struct _response_t{
         json_t *cookies_properties;
 };
 
-//possible cookies_properties:
-/*
- *
- * Expires=Date
- * Secure;
- * HttpOnly;
- * Domain=
- * Path=
- * SameSite= (puede ser Strict, Lax o None), si agrego SameSite, es obligatorio tenga "Secure"
- * Max-Age=Number
- * Partitioned; es experimental en teoria, por lo que no lo voy a tomar en cuenta (?
- * 
- * Ejemplo una cookie
- * Set-Cookie: Key=Value; HttpOnly; Secure; Domain=un_dominio
- * Expire y Max-Age son muy similares por lo que entiendo, voy a hacer que solo pueda usar Max-Age xd
- * 
- * Entonces voy a aceptar
- * Max-Age=Un numero en formato string
- * Secure=Cualquier string
- * HttpOnly=Cualquier String
- * Partitioned=Cualquier String
- * Path=El path que ponga el usuario
- * Domain=El domain que ponga el usuario
- * 
-*/
-
-
 typedef void *(*route_function)(request_t *request, response_t *response, void *aux);
 
 typedef struct route_structure
@@ -102,10 +75,16 @@ static void free_response(response_t *response)
         free(response);
 }
 
+/*
+ *
+ * Add properties to the cookies
+ * 
+ */
 void add_properties(char *request_data, json_t *properties)
 {
         if (!properties || !request_data)
                 return;
+
         json_t *max_age = json_object_get(properties, "Max-Age");
         json_t *secure = json_object_get(properties, "Secure");
         json_t *http_only = json_object_get(properties, "HttpOnly");    
@@ -139,6 +118,11 @@ void add_properties(char *request_data, json_t *properties)
 
 }
 
+/*
+ *
+ * Add the cookies and properties if exists to the response
+ * 
+ */
 void add_cookies_response(char *request_data, json_t *cookies, json_t *properties)
 {
         const char *key;
@@ -282,7 +266,11 @@ static json_t *get_query_param(char *all_the_params, json_error_t error)
         return json_loads(creating_json, 0, &error);
 }
 
-
+/*
+ *
+ * Try to get the possible param of a request
+ * 
+ */
 static void get_possible_param(char *temp, char *possible_param)
 {
         if (!temp || !possible_param)
@@ -318,25 +306,25 @@ static json_t *parse_cookies(char *headers, json_error_t error)
         cookie[strlen(cookie) -1] = '\0';
 
         token = strtok(cookie, " ");
-        char claves[SMALL_MAXLINE];
-        char valores[SMALL_MAXLINE];
+        char keys[SMALL_MAXLINE];
+        char values[SMALL_MAXLINE];
         char creating_json[MAXLINE];
         creating_json[0] = '{';
         creating_json[1] = '\n';
         creating_json[2] = '\0';
         size_t len;
         while (token != NULL) {
-                sscanf(token, "%[^=]=%[^=]", claves, valores);
-                len = strlen(valores);
-                if (valores[len -1] == ';')
-                        valores[len -1] = '\0';
-                strcat(claves, "\"");        
-                strcat(valores, "\"");
+                sscanf(token, "%[^=]=%[^=]", keys, values);
+                len = strlen(values);
+                if (values[len -1] == ';')
+                        values[len -1] = '\0';
+                strcat(keys, "\"");        
+                strcat(values, "\"");
                 strcat(creating_json, "\"");
-                strcat(creating_json, claves);
+                strcat(creating_json, keys);
                 strcat(creating_json, ":");
                 strcat(creating_json, "\"");
-                strcat(creating_json, valores);
+                strcat(creating_json, values);
                 strcat(creating_json, ",");
                 strcat(creating_json, "\n");
                 token = strtok(NULL, " ");
@@ -560,8 +548,6 @@ void *handle_connection(void *client_pointer, void *routes)
         json_t *cookies = NULL;
         char *token = strtok(request_data, "{");
 
-        
-
         if (!token)
                 return NULL;
 
@@ -668,6 +654,11 @@ response_t *set_data_json(response_t *response, json_t *json_data)
         return response;
 }
 
+/*
+ *
+ * Set cookies to send as a response
+ * 
+ */
 response_t *set_cookies(response_t *response, json_t *cookies, json_t *properties)      
 {
         if (!response || !cookies)
@@ -682,7 +673,7 @@ response_t *set_cookies(response_t *response, json_t *cookies, json_t *propertie
 
 /*
  *
- * get the param of the request if exists
+ * Get the param of the request if exists
  * 
  */
 char *get_param(request_t *request) 
@@ -693,6 +684,11 @@ char *get_param(request_t *request)
         return request->params;
 }
 
+/*
+ *
+ * Get the body of a request
+ * 
+ */
 json_t *get_body(request_t *request)
 {
         if (!request)
@@ -701,6 +697,11 @@ json_t *get_body(request_t *request)
         return request->body;
 }
 
+/*
+ *
+ * Get the cookies of a request
+ * 
+ */
 json_t *get_cookies(request_t *request)
 {
         if (!request)
