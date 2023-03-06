@@ -504,6 +504,12 @@ static route_structure_t *get_route(hash_t *routes, request_t *request, char *ro
                 return NULL;
 
         possible_param = strtok(possible_param, "?");
+        if (!possible_param) {
+                strtok(route_of_hash, ":");
+                return hash_obtener(routes, route_of_hash);
+        }
+                
+        
         route_structure_t *route_structure;
         for (int i = 0; i < 2; i++) {
                 route_structure = hash_obtener(routes, route_of_hash);
@@ -544,6 +550,7 @@ void *handle_connection(void *client_pointer, void *routes)
         char method[SMALL_MAXLINE];
         char route_url[SMALL_MAXLINE];
         char possible_param[SMALL_MAXLINE];
+        possible_param[0] = '\0';
         char headers[MAXLINE];
         json_t *cookies = NULL;
         char *token = strtok(request_data, "{");
@@ -568,8 +575,15 @@ void *handle_connection(void *client_pointer, void *routes)
         free(route_of_hash);
 
         if (route_structure == NULL) {
-                response->status = NOT_FOUND;
-                send_response(response);
+                if ((route_structure = hash_obtener(routes, "ALL/*")) != NULL) {
+                        route_structure->function(request, response, route_structure->aux);
+                } else {
+                        response->status = NOT_FOUND;
+                        send_response(response);
+                }
+                
+                free_request(request);
+                return NULL;
         }
 
         if (route_structure != NULL)
@@ -578,6 +592,23 @@ void *handle_connection(void *client_pointer, void *routes)
         free_request(request);
         
         return NULL;
+}
+
+
+route_structure_t *create_route_structure(void *(*f)(request_t *request, response_t *response, void *aux), void *aux)
+{
+        if (!f)
+                return NULL;
+
+        route_structure_t *route_structure = malloc(sizeof(route_structure_t));
+
+        if (!route_structure)
+                return NULL;
+
+        route_structure->function = f;
+        route_structure->aux = aux;
+
+        return route_structure;
 }
 
 /*
@@ -590,9 +621,11 @@ void *create_route(hash_t *hash, char *route_name, void *(*f)(request_t *request
         if (!hash || !route_name || !f)
                 return NULL;
 
-        route_structure_t *route_structure = malloc(sizeof(route_structure_t));
-        route_structure->function = f;
-        route_structure->aux = aux;
+        route_structure_t *route_structure = create_route_structure(f, aux);
+
+        if (!route_structure)
+                return NULL;
+        
         char route_of_hash[SMALL_MAXLINE];
 
         if (type == GET) {
@@ -607,6 +640,8 @@ void *create_route(hash_t *hash, char *route_name, void *(*f)(request_t *request
         } else if (type == DELETE) {
                 strcpy(route_of_hash, "DELETE");
                 strcat(route_of_hash, route_name);
+        } else if (type == ALL) {
+                strcpy(route_of_hash, "ALL/*");
         }
 
         return hash_insertar(hash, route_of_hash, route_structure, NULL);

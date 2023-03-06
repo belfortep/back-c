@@ -1,14 +1,14 @@
 #include "my_backend_c/server/server.h"
 #include "stdio.h"
 //#include "my_backend_c/database/database.h"
-#define PORT 4000
+#define PORT 5000
 
 void *get_users(request_t *request, response_t *response, void *aux)
 {
         response = set_status(response, OK);
-        response = set_data_json(response, get_body(request));
+        //response = set_data_json(response, get_body(request));
         //MYSQL_RES *result = get_all(aux, "cars");     despues vemos bien que hacer con esto, pero es problema del usuario (?
-        
+        response = set_data(response, "some users");
 
 
         return send_response(response);
@@ -59,6 +59,14 @@ void *update_user(request_t *request, response_t *response, void *aux)
         return send_response(response);
 }
 
+void *not_found_function(request_t *request, response_t *response, void *aux)
+{
+        response = set_status(response, NOT_FOUND);
+        
+        response = set_data(response, "<h1>Not found</h1>");
+
+        return send_response(response);
+}
 
 
 int main()
@@ -69,12 +77,13 @@ int main()
         char *db = "testdb";*/
         hash_t *hash = hash_crear(10);        //cambiar que no necesite el tamanio inicial, cambiar nombre a "routes_t" o algo asi
         //MYSQL *connection = connect_db(host, user, password, db);
-        
+        create_route(hash, "/", get_users, NULL, GET);
         create_route(hash, "/users", get_users, NULL, GET);
         create_route(hash, "/user/:id", get_user, NULL, GET);
         create_route(hash, "/user", create_user, NULL, POST);
         create_route(hash, "/user/:id", delete_user, NULL, DELETE);
         create_route(hash, "/user/:id", update_user, NULL, PUT);
+        create_route(hash, "/*", not_found_function, NULL, ALL);
         
         init_server(PORT, hash);
         hash_destruir(hash);

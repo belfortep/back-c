@@ -17,6 +17,6 @@
 - [x] Use of different routes and methods
 - [x] Can handle query params in URL
 - [x] Handle request and response
-- [ ] Use of Cookies
+- [x] Use of Cookies
 - [ ] Receive multiple params in url
 - [ ] Automated tests

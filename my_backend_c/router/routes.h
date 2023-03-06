@@ -3,7 +3,7 @@
 
 #include "../data_structures/data_structures.h"
 #include <jansson.h>
-typedef enum { GET, POST, PUT, DELETE } http_code;
+typedef enum { GET, POST, PUT, DELETE, ALL } http_code;
 typedef enum { OK = 200, CREATED = 201, NO_CONTENT = 204, BAD_REQUEST = 400, UNAUTHORIZED = 401, FORBIDDEN = 403, NOT_FOUND = 404, IM_A_TEAPOT = 418, INTERNAL_SERVER_ERROR = 500 } http_status;
 
 typedef struct _request_t request_t;
