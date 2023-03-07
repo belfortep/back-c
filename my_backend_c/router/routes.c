@@ -641,7 +641,8 @@ void *create_route(hash_t *hash, char *route_name, void *(*f)(request_t *request
                 strcpy(route_of_hash, "DELETE");
                 strcat(route_of_hash, route_name);
         } else if (type == ALL) {
-                strcpy(route_of_hash, "ALL/*");
+                strcpy(route_of_hash, "ALL");
+                strcat(route_of_hash, route_name);
         }
 
         return hash_insertar(hash, route_of_hash, route_structure, NULL);
@@ -743,4 +744,27 @@ json_t *get_cookies(request_t *request)
                 return NULL;
 
         return request->cookies;
+}
+
+
+
+
+char *load_html(char *file_name, char *html_data, size_t size)
+{
+        if (!file_name || !html_data)
+                return NULL;
+
+        FILE *fd = fopen(file_name, "r");
+
+        if (!fd)
+                return NULL;
+
+        memset(html_data, 0, size);
+
+        if(fread(html_data, sizeof(char), size, fd) == 0)
+                return NULL;
+
+        fclose(fd);
+
+        return html_data;
 }

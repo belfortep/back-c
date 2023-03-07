@@ -63,8 +63,12 @@ void *not_found_function(request_t *request, response_t *response, void *aux)
 {
         response = set_status(response, NOT_FOUND);
         
-        response = set_data(response, "<h1>Not found</h1>");
+        char html_data[4096];
 
+        load_html("file_name.html", html_data, 4096);
+
+        response = set_data(response, html_data);
+        
         return send_response(response);
 }
 
