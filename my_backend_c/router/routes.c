@@ -34,6 +34,7 @@ struct _request_t{
         char params[256];
         json_t *query;
         json_t *cookies;
+        json_t *wip_params;
 };
 
 struct _response_t{
@@ -51,6 +52,7 @@ typedef struct route_structure
 {
         route_function function;
         void *aux;
+        json_t *params;
 } route_structure_t;
 
 /*
@@ -509,7 +511,6 @@ static route_structure_t *get_route(hash_t *routes, request_t *request, char *ro
                 return hash_obtener(routes, route_of_hash);
         }
                 
-        
         route_structure_t *route_structure;
         for (int i = 0; i < 2; i++) {
                 route_structure = hash_obtener(routes, route_of_hash);
@@ -595,7 +596,7 @@ void *handle_connection(void *client_pointer, void *routes)
 }
 
 
-route_structure_t *create_route_structure(void *(*f)(request_t *request, response_t *response, void *aux), void *aux)
+route_structure_t *create_route_structure(void *(*f)(request_t *request, response_t *response, void *aux), void *aux, json_t *params)
 {
         if (!f)
                 return NULL;
@@ -607,8 +608,37 @@ route_structure_t *create_route_structure(void *(*f)(request_t *request, respons
 
         route_structure->function = f;
         route_structure->aux = aux;
+        route_structure->params = params;
 
         return route_structure;
+}
+
+
+json_t *create_json_from_params(char *route)
+{
+        json_t *json = json_object();
+        json_t *string = json_string("");
+        int i = 0;
+        int j = 0;
+        char temp_for_param_name[SMALL_MAXLINE];
+
+        while (route[i] != '\0') {
+                if (route[i] == ':') {
+                        i++;
+                        while((route[i] != '\0') && (route[i] != ':') && (route[i] != '/')) {
+                                temp_for_param_name[j] = route[i];
+                                j++;
+                                i++;
+                        }
+                        temp_for_param_name[j] = '\0';
+                        json_object_set(json, temp_for_param_name, string);
+                        j = 0;
+                }
+
+                i++;
+        }
+
+        return json;
 }
 
 /*
@@ -621,7 +651,9 @@ void *create_route(hash_t *hash, char *route_name, void *(*f)(request_t *request
         if (!hash || !route_name || !f)
                 return NULL;
 
-        route_structure_t *route_structure = create_route_structure(f, aux);
+
+
+        route_structure_t *route_structure = create_route_structure(f, aux, create_json_from_params(route_name));
 
         if (!route_structure)
                 return NULL;

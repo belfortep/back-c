@@ -1,7 +1,7 @@
 #include "my_backend_c/server/server.h"
 #include "stdio.h"
 //#include "my_backend_c/database/database.h"
-#define PORT 5000
+#define PORT 4000
 
 void *get_users(request_t *request, response_t *response, void *aux)
 {
