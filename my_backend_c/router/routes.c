@@ -460,7 +460,7 @@ static void free_request(request_t *request)
  * Inner function needed to get the possible param
  * 
  */
-static void reduce_route_url(char *route_url)
+/*static void reduce_route_url(char *route_url)
 {       
         if (!route_url)
                 return;
@@ -472,7 +472,7 @@ static void reduce_route_url(char *route_url)
         }
         
         strcat(route_url, ":id");
-}
+}*/
 
 /*
  *
@@ -500,31 +500,74 @@ static char *get_route_of_hash(char *method, char *route_url)
  * Try to get the route_structure from the routes hash
  * 
  */
-static route_structure_t *get_route(hash_t *routes, request_t *request, char *route_of_hash, char *possible_param)
+static route_structure_t *get_route(hash_t *routes, request_t *request, char *route_of_hash)
 {
-        if (!routes || !request || !route_of_hash || !possible_param)
-                return NULL;
-
-        possible_param = strtok(possible_param, "?");
-        if (!possible_param) {
-                strtok(route_of_hash, ":");
-                return hash_obtener(routes, route_of_hash);
-        }
+        route_structure_t *route_structure = hash_obtener(routes, route_of_hash);
+        printf("%s \n", route_of_hash);
+        if (!route_structure) {
+                char array_of_params[10][SMALL_MAXLINE];
+                size_t length = strlen(route_of_hash);
+                int j = 0;
+                char last_param[SMALL_MAXLINE];
+                char *last_param_in_route = strrchr(route_of_hash, '/');
+                strcpy(last_param, last_param_in_route);
+                size_t last_param_lenght = strlen(last_param);
+                char temp[SMALL_MAXLINE];
                 
-        route_structure_t *route_structure;
-        for (int i = 0; i < 2; i++) {
-                route_structure = hash_obtener(routes, route_of_hash);
-                if (route_structure != NULL) {
-                        if (i == 0) 
-                                strcpy(request->params, possible_param);
+                while (route_structure == NULL || j >= 9 || last_param == NULL) {
+                        strcpy(array_of_params[j], last_param);
+                        j++;
+
+                        while (last_param_lenght > 0) {
+                                route_of_hash[length-1] = '\0';
+                                length--;
+                                last_param_lenght--;
+                        }
+
+
+
+                        printf("route es: %s \n", route_of_hash);
+                        sprintf(temp, "%d", j);
+                        strcat(route_of_hash, temp);
+                        length++;
+                        route_structure = hash_obtener(routes, route_of_hash);
+                        if (route_structure) {
+                                const char *key;
+                                json_t *value;
+                                json_t *mi_string;
+                                j--;
+                                json_object_foreach(route_structure->params, key, value) {
+                                        mi_string = json_string(array_of_params[j]);
+                                        json_object_set(route_structure->params, key, mi_string);
+                                        j--;
+                                }
+                                request->wip_params = route_structure->params;
+                                break;
+                        }
                         
-                        break;
+                        route_of_hash[length-1] = '\0';
+                        length--;
+                        last_param_in_route = strrchr(route_of_hash, '/');
+
+                        if (!last_param_in_route) {
+                                
+                                strcpy(route_of_hash, "GET/");
+                                strcat(route_of_hash, temp);
+                                route_structure = hash_obtener(routes, route_of_hash);
+
+                                break;
+                        }
+
+                        strcpy(last_param, last_param_in_route);
+                        last_param_lenght = strlen(last_param);
                 }
-                if (route_of_hash != NULL) 
-                        strtok(route_of_hash, ":");
-                        
-                strcat(route_of_hash, possible_param);
+                
+                
+
         }
+
+        
+                
 
         return route_structure;
 }
@@ -563,7 +606,7 @@ void *handle_connection(void *client_pointer, void *routes)
         token = strtok(NULL, "{");
         
         json_t *json_query_param = parse_request(headers, route_url, method, possible_param, &cookies);
-        reduce_route_url(route_url);
+        //reduce_route_url(route_url);
 
         char *route_of_hash = get_route_of_hash(method, route_url);
         response_t *response = create_response(client_socket);
@@ -572,7 +615,7 @@ void *handle_connection(void *client_pointer, void *routes)
         if (!request || !response || !route_of_hash)
                 return NULL;
 
-        route_structure_t *route_structure = get_route(routes, request, route_of_hash, possible_param);
+        route_structure_t *route_structure = get_route(routes, request, route_of_hash);
         free(route_of_hash);
 
         if (route_structure == NULL) {
@@ -641,6 +684,19 @@ json_t *create_json_from_params(char *route)
         return json;
 }
 
+char *create_route_with_no_params(char *route_name, int number_of_params)
+{
+        char temp[SMALL_MAXLINE];
+        //printf("route es: %s\n", route_name);
+        char *token = strtok(route_name, ":");
+        sprintf(temp, "%d", number_of_params);
+        token[strlen(token)-1] = '\0';
+        strcat(token, temp);
+        //printf("token es: %s \n", token);
+
+        return token;
+}
+
 /*
  *
  * Create a new possible route with the associated http_code
@@ -651,8 +707,7 @@ void *create_route(hash_t *hash, char *route_name, void *(*f)(request_t *request
         if (!hash || !route_name || !f)
                 return NULL;
 
-
-
+        int number_of_params = 0;
         route_structure_t *route_structure = create_route_structure(f, aux, create_json_from_params(route_name));
 
         if (!route_structure)
@@ -662,19 +717,37 @@ void *create_route(hash_t *hash, char *route_name, void *(*f)(request_t *request
 
         if (type == GET) {
                 strcpy(route_of_hash, "GET");
-                strcat(route_of_hash, route_name);
+                if (number_of_params == 0) {
+                        strcat(route_of_hash, route_name);
+                } else {
+                        strcat(route_of_hash, create_route_with_no_params(route_name, number_of_params));
+                }
         } else if (type == POST) {
                 strcpy(route_of_hash, "POST");
-                strcat(route_of_hash, route_name);
+                if (number_of_params == 0) {
+                        strcat(route_of_hash, route_name);
+                }
         } else if (type == PUT) {
                 strcpy(route_of_hash, "PUT");
-                strcat(route_of_hash, route_name);
+                if (number_of_params == 0) {
+                        strcat(route_of_hash, route_name);
+                } else {
+                        strcat(route_of_hash, create_route_with_no_params(route_name, number_of_params));
+                }
         } else if (type == DELETE) {
                 strcpy(route_of_hash, "DELETE");
-                strcat(route_of_hash, route_name);
+                if (number_of_params == 0) {
+                        strcat(route_of_hash, route_name);
+                } else {
+                        strcat(route_of_hash, create_route_with_no_params(route_name, number_of_params));
+                }
         } else if (type == ALL) {
                 strcpy(route_of_hash, "ALL");
-                strcat(route_of_hash, route_name);
+                if (number_of_params == 0) {
+                        strcat(route_of_hash, route_name);
+                } else {
+                        strcat(route_of_hash, create_route_with_no_params(route_name, number_of_params));
+                }
         }
 
         return hash_insertar(hash, route_of_hash, route_structure, NULL);
