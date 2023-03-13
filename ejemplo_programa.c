@@ -1,7 +1,7 @@
 #include "my_backend_c/server/server.h"
 #include "stdio.h"
 //#include "my_backend_c/database/database.h"
-#define PORT 5000
+#define PORT 7000
 
 void *get_users(request_t *request, response_t *response, void *aux)
 {
@@ -45,7 +45,7 @@ void *delete_user(request_t *request, response_t *response, void *aux)
 {
         //delete_by_id(aux, "cars", request->params);
         response = set_status(response, OK);
-        response = set_data_json(response, get_body(request));
+        response = set_data_json(response, get_params(request));
 
         return send_response(response);
 }

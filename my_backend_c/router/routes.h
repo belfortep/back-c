@@ -24,7 +24,7 @@ response_t *set_data_json(response_t *response, json_t *json_data);
 
 response_t *set_cookies(response_t *response, json_t *cookies, json_t *properties);
 
-char *get_param(request_t *request);
+json_t *get_params(request_t *request);
 
 json_t *get_body(request_t *request);
 
