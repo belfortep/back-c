@@ -36,7 +36,13 @@ void *create_user(request_t *request, response_t *response, void *aux)
 {
         //insert_into(aux, "cars", request->body);
         response = set_status(response, CREATED);
-        response = set_data_json(response, get_body(request));
+        //response = set_data_json(response, get_body(request));
+
+        json_t *query= get_querys(request);
+
+        if (query) {
+                set_data_json(response, query);
+        }
 
         return send_response(response);
 }

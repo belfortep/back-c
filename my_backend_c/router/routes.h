@@ -30,6 +30,8 @@ json_t *get_body(request_t *request);
 
 json_t *get_cookies(request_t *request);
 
+json_t *get_querys(request_t *request);
+
 char *load_html(char *file_name, char *html_data, size_t size);
 
 

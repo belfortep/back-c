@@ -28,13 +28,13 @@
 #define HEADER_NOT_FOUND "HTTP/1.1 404 NOT-FOUND\n"
 #define HEADER_IM_A_TEAPOT "HTTP/1.1 418 IM-A-TEAPOT\n"
 #define HEADER_INTERNAL_SERVER_ERROR "HTTP/1.1 500 INTERNAL-SERVER-ERROR\n"
+#define MAX_NUMBER_OF_PARAMS 10
 
 struct _request_t{
         json_t *body;
-        char params[256];
         json_t *query;
         json_t *cookies;
-        json_t *wip_params;
+        json_t *params;
 };
 
 struct _response_t{
@@ -94,28 +94,23 @@ void add_properties(char *request_data, json_t *properties)
         json_t *domain = json_object_get(properties, "Domain");
         
         
-        if (max_age) {
-                strcat(request_data, "; ");
-                strcat(request_data, "Max-Age=");
+        if (max_age) {                  //intentar usar un solo strcat, creo que asi seria mas rapido
+                strcat(request_data, "; Max-Age=");             
                 strcat(request_data, json_string_value(max_age));
         }
         if (path) {
-                strcat(request_data, "; ");
-                strcat(request_data, "Path=");
+                strcat(request_data, "; Path=");
                 strcat(request_data, json_string_value(path));
         }
         if (domain) {
-                strcat(request_data, "; ");
-                strcat(request_data, "Domain=");
+                strcat(request_data, "; Domain=");
                 strcat(request_data, json_string_value(domain));
         }
         if (secure) {
-                strcat(request_data, "; ");
-                strcat(request_data, "Secure");
+                strcat(request_data, "; Secure");
         }
         if (http_only) {
-                strcat(request_data, "; ");
-                strcat(request_data, "HttpOnly");
+                strcat(request_data, "; HttpOnly");
         }
 
 }
@@ -177,7 +172,7 @@ void *send_response(response_t *response)
         if (response->cookies)
                 add_cookies_response(response_data, response->cookies, response->cookies_properties);
 
-        if (response->data) {
+        if (response->data) {//intentar usar un solo strcat, creo que asi seria mas rapido
                 strcat(response_data, "Access-Control-Allow-Origin: *\nConnection: Keep-alive\nContent-Type: text/html; charset=UTF-8\nKeep-Alive: timeout=5, max=999\r\n\r\n");
                 strcat(response_data, response->data); 
         }
@@ -253,18 +248,16 @@ static json_t *get_query_param(char *all_the_params, json_error_t error)
                 strcat(valores, "\"");
                 strcat(creating_json, "\"");
                 strcat(creating_json, claves);
-                strcat(creating_json, ":");
-                strcat(creating_json, "\"");
+                strcat(creating_json, ":\"");
                 strcat(creating_json, valores);
-                strcat(creating_json, ",");
-                strcat(creating_json, "\n");
+                strcat(creating_json, ",\n");
                 token = strtok(NULL, "&");
         }
         size_t len = strlen(creating_json);
         creating_json[len -2] = '\n';
-        creating_json[len -1] = '\0';
-        strcat(creating_json, "}");
-        
+        creating_json[len -1] = '}';
+        creating_json[len] = '\0';
+
         return json_loads(creating_json, 0, &error);
 }
 
@@ -283,8 +276,8 @@ static json_t *parse_cookies(char *headers, json_error_t error)
                 return NULL;
 
         token = strtok(token, ":");
-
         token = strtok(NULL, ":");
+
         char cookie[MAXLINE];
         sscanf(token, "%[^\n]", cookie);
         cookie[strlen(cookie) -1] = '\0';
@@ -306,11 +299,9 @@ static json_t *parse_cookies(char *headers, json_error_t error)
                 strcat(values, "\"");
                 strcat(creating_json, "\"");
                 strcat(creating_json, keys);
-                strcat(creating_json, ":");
-                strcat(creating_json, "\"");
+                strcat(creating_json, ":\"");
                 strcat(creating_json, values);
-                strcat(creating_json, ",");
-                strcat(creating_json, "\n");
+                strcat(creating_json, ",\n");
                 token = strtok(NULL, " ");
         }
         len = strlen(creating_json);
@@ -342,11 +333,10 @@ static json_t *parse_request(char *headers, char *route_url, char *method, json_
         sscanf(route_url, "%*[^?]%s", all_the_params);
         json_t *json_query_param = NULL;
         
-
         if (all_the_params[0] != '\0')
                 json_query_param = get_query_param(all_the_params, error);
-        
 
+        
         return json_query_param;
 }
 
@@ -412,7 +402,7 @@ static request_t *create_request(json_t *body, json_t *query, json_t *cookies)
         request->body = body;
         request->query = query;
         request->cookies = cookies;
-        request->wip_params = NULL;
+        request->params = NULL;
 
         return request;
 }
@@ -439,25 +429,6 @@ static void free_request(request_t *request)
 
 /*
  *
- * Inner function needed to get the possible param
- * 
- */
-/*static void reduce_route_url(char *route_url)
-{       
-        if (!route_url)
-                return;
-
-        for (size_t i = strlen(route_url); i > 0; i--) {
-                if (route_url[i] == '/')
-                        break;
-                route_url[i] = '\0';
-        }
-        
-        strcat(route_url, ":id");
-}*/
-
-/*
- *
  * Make an union of the method and the route_url to pass to the routes hash 
  * 
  */
@@ -471,6 +442,7 @@ static char *get_route_of_hash(char *method, char *route_url)
         if (!route_of_hash)
                 return NULL;
 
+        strtok(route_url, "?");
         strcpy(route_of_hash, method);        
         strcat(route_of_hash, route_url);
 
@@ -485,27 +457,29 @@ static char *get_route_of_hash(char *method, char *route_url)
 static route_structure_t *get_route(hash_t *routes, request_t *request, char *route_of_hash)
 {
         route_structure_t *route_structure = hash_obtener(routes, route_of_hash);
-        printf("%s \n", route_of_hash);
+
         if (!route_structure) {
-                char array_of_params[10][SMALL_MAXLINE];
+                char array_of_params[MAX_NUMBER_OF_PARAMS][SMALL_MAXLINE];
                 size_t length = strlen(route_of_hash);
-                int j = 0;
+                int number_of_params = 0;
                 char last_param[SMALL_MAXLINE];
                 char *last_param_in_route = strrchr(route_of_hash, '/');
                 strcpy(last_param, last_param_in_route);
                 size_t last_param_lenght = strlen(last_param);
                 char temp[SMALL_MAXLINE];
                 
-                while (route_structure == NULL || j >= 9 || last_param == NULL) {
-                        strcpy(array_of_params[j], last_param);
-                        j++;
+                while (route_structure == NULL || number_of_params > MAX_NUMBER_OF_PARAMS || last_param == NULL) {
+
+                        strcpy(array_of_params[number_of_params], last_param);
+                        number_of_params++;
 
                         while (last_param_lenght > 0) {
                                 route_of_hash[length-1] = '\0';
                                 length--;
                                 last_param_lenght--;
                         }
-                        sprintf(temp, "%d", j);
+
+                        sprintf(temp, "%d", number_of_params);
                         strcat(route_of_hash, temp);
                         length++;
                         route_structure = hash_obtener(routes, route_of_hash);
@@ -513,14 +487,14 @@ static route_structure_t *get_route(hash_t *routes, request_t *request, char *ro
                                 const char *key;
                                 json_t *value;
                                 json_t *string;
-                                j--;
+                                number_of_params--;
                                 json_object_foreach(route_structure->params, key, value) {
-                                        string = json_string((array_of_params[j])+1);
+                                        string = json_string((array_of_params[number_of_params])+1);
                                         json_object_set(route_structure->params, key, string);
-                                        j--;
+                                        number_of_params--;
                                 }
 
-                                request->wip_params = route_structure->params;
+                                request->params = route_structure->params;
                                 break;
                         }
                         
@@ -529,24 +503,16 @@ static route_structure_t *get_route(hash_t *routes, request_t *request, char *ro
                         last_param_in_route = strrchr(route_of_hash, '/');
 
                         if (!last_param_in_route) {
-                                
                                 strcpy(route_of_hash, "GET/");
                                 strcat(route_of_hash, temp);
                                 route_structure = hash_obtener(routes, route_of_hash);
-
                                 break;
                         }
 
                         strcpy(last_param, last_param_in_route);
                         last_param_lenght = strlen(last_param);
                 }
-                
-                
-
         }
-
-        
-                
 
         return route_structure;
 }
@@ -575,7 +541,7 @@ void *handle_connection(void *client_pointer, void *routes)
         free(client_pointer);
 
         char request_data[MAXLINE];
-        memset(request_data, 0, MAXLINE);       
+        memset(request_data, 0, MAXLINE);  
         
         if (read(client_socket, request_data, MAXLINE) < 0)
                 return NULL;
@@ -687,6 +653,34 @@ void create_route_with_no_params(char *route_name, char *token, int number_of_pa
         strcat(token, temp);
 }
 
+
+void create_route_key_for_hash(char *route_of_hash, char *route_name, int number_of_params, http_code type)
+{
+        if (!route_of_hash || !route_name)
+                return;
+
+        if (type == GET) {
+                strcpy(route_of_hash, "GET");
+        } else if (type == POST) {
+                strcpy(route_of_hash, "POST");
+        } else if (type == PUT) {
+                strcpy(route_of_hash, "PUT");
+        } else if (type == DELETE) {
+                strcpy(route_of_hash, "DELETE");
+        } else if (type == ALL) {
+                strcpy(route_of_hash, "ALL");
+        }
+
+        if (number_of_params == 0) {
+                strcat(route_of_hash, route_name);
+        } else {
+                char token[SMALL_MAXLINE];
+                create_route_with_no_params(route_name, token, number_of_params);
+                strcat(route_of_hash, token);
+        }
+}
+
+
 /*
  *
  * Create a new possible route with the associated http_code
@@ -704,53 +698,7 @@ void *create_route(hash_t *hash, char *route_name, void *(*f)(request_t *request
                 return NULL;
         
         char route_of_hash[SMALL_MAXLINE];
-
-        if (type == GET) {
-                strcpy(route_of_hash, "GET");
-                if (number_of_params == 0) {
-                        strcat(route_of_hash, route_name);
-                } else {
-                        char token[SMALL_MAXLINE];
-                        create_route_with_no_params(route_name, token, number_of_params);
-                        strcat(route_of_hash, token);
-                }
-        } else if (type == POST) {
-                strcpy(route_of_hash, "POST");
-                if (number_of_params == 0) {
-                        strcat(route_of_hash, route_name);
-                } else {
-                        char token[SMALL_MAXLINE];
-                        create_route_with_no_params(route_name, token, number_of_params);
-                        strcat(route_of_hash, token);
-                }
-        } else if (type == PUT) {
-                strcpy(route_of_hash, "PUT");
-                if (number_of_params == 0) {
-                        strcat(route_of_hash, route_name);
-                } else {
-                        char token[SMALL_MAXLINE];
-                        create_route_with_no_params(route_name, token, number_of_params);
-                        strcat(route_of_hash, token);
-                }
-        } else if (type == DELETE) {
-                strcpy(route_of_hash, "DELETE");
-                if (number_of_params == 0) {
-                        strcat(route_of_hash, route_name);
-                } else {
-                        char token[SMALL_MAXLINE];
-                        create_route_with_no_params(route_name, token, number_of_params);
-                        strcat(route_of_hash, token);
-                }
-        } else if (type == ALL) {
-                strcpy(route_of_hash, "ALL");
-                if (number_of_params == 0) {
-                        strcat(route_of_hash, route_name);
-                } else {
-                        char token[SMALL_MAXLINE];
-                        create_route_with_no_params(route_name, token, number_of_params);
-                        strcat(route_of_hash, token);
-                }
-        }
+        create_route_key_for_hash(route_of_hash, route_name, number_of_params, type);
 
         return hash_insertar(hash, route_of_hash, route_structure, NULL);
 }
@@ -824,7 +772,7 @@ json_t *get_params(request_t *request)
         if (!request)
                 return NULL;
 
-        return request->wip_params;
+        return request->params;
 }
 
 /*
@@ -853,7 +801,13 @@ json_t *get_cookies(request_t *request)
         return request->cookies;
 }
 
+json_t *get_querys(request_t *request)
+{
+        if (!request)
+                return NULL;
 
+        return request->query;
+}
 
 
 char *load_html(char *file_name, char *html_data, size_t size)
