@@ -261,8 +261,6 @@ static json_t *get_query_param(char *all_the_params, json_error_t error)
         return json_loads(creating_json, 0, &error);
 }
 
-
-
 /*
  *
  * Get the key-value pair of the cookies if exists
@@ -517,6 +515,11 @@ static route_structure_t *get_route(hash_t *routes, request_t *request, char *ro
         return route_structure;
 }
 
+/*
+ *
+ * Free the memory associated to the json values in the route_structure
+ * 
+ */
 void free_route_structure(route_structure_t *route_structure)
 {
         const char *key;
@@ -592,7 +595,11 @@ void *handle_connection(void *client_pointer, void *routes)
         return NULL;
 }
 
-
+/*
+ *
+ * Malloc the memory needed for a route_structure
+ * 
+ */
 route_structure_t *create_route_structure(void *(*f)(request_t *request, response_t *response, void *aux), void *aux, json_t *params)
 {
         if (!f)
@@ -610,7 +617,11 @@ route_structure_t *create_route_structure(void *(*f)(request_t *request, respons
         return route_structure;
 }
 
-
+/*
+ *
+ * Create a json with the keys from the route params (example = /user/:id) and no value
+ * 
+ */
 json_t *create_json_from_params(char *route, int *number_of_params)
 {
         json_t *json = json_object();
@@ -639,6 +650,11 @@ json_t *create_json_from_params(char *route, int *number_of_params)
         return json;
 }
 
+/*
+ *
+ * Eliminate the :param_name from the route and add the number of this params to the route_name, to use in the hash
+ * 
+ */
 void create_route_with_no_params(char *route_name, char *token, int number_of_params)
 {
         char temp[SMALL_MAXLINE];
@@ -653,7 +669,11 @@ void create_route_with_no_params(char *route_name, char *token, int number_of_pa
         strcat(token, temp);
 }
 
-
+/*
+ *
+ * Get the cookies of a request
+ * 
+ */
 void create_route_key_for_hash(char *route_of_hash, char *route_name, int number_of_params, http_code type)
 {
         if (!route_of_hash || !route_name)
@@ -679,7 +699,6 @@ void create_route_key_for_hash(char *route_of_hash, char *route_name, int number
                 strcat(route_of_hash, token);
         }
 }
-
 
 /*
  *
@@ -801,6 +820,11 @@ json_t *get_cookies(request_t *request)
         return request->cookies;
 }
 
+/*
+ *
+ * Get the url querys of a request
+ * 
+ */
 json_t *get_querys(request_t *request)
 {
         if (!request)
@@ -809,7 +833,11 @@ json_t *get_querys(request_t *request)
         return request->query;
 }
 
-
+/*
+ *
+ * Load a html file as a string in the second parameter.
+ * 
+ */
 char *load_html(char *file_name, char *html_data, size_t size)
 {
         if (!file_name || !html_data)

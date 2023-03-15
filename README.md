@@ -18,5 +18,5 @@
 - [x] Can handle query params in URL
 - [x] Handle request and response
 - [x] Use of Cookies
-- [ ] Receive multiple params in url
+- [x] Receive multiple params in url
 - [ ] Automated tests
