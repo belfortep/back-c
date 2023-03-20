@@ -1,34 +1,10 @@
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <stdarg.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/time.h>
-#include <sys/ioctl.h>
-#include <netdb.h>
-#include <strings.h>
-#include <pthread.h>
-#include <jansson.h>
+#include "../imports/common_imports.h"
+#include "../imports/constants.h"
 #include "../error_management/error_management.h"
 #include "routes.h"
-#define MAXLINE 4096
-#define SMALL_MAXLINE 256
-#define HEADER_OK "HTTP/1.1 200 OK\n"
-#define HEADER_CREATED "HTTP/1.1 201 CREATED\n"
-#define HEADER_NO_CONTENT "HTTP/1.1 204 NO-CONTENT\n"
-#define HEADER_BAD_REQUEST "HTTP/1.1 400 BAD-REQUEST\n"
-#define HEADER_UNAUTHORIZED "HTTP/1.1 401 UNAUTHORIZED\n"
-#define HEADER_FORBIDDEN "HTTP/1.1 403 FORBIDDEN\n"
-#define HEADER_NOT_FOUND "HTTP/1.1 404 NOT-FOUND\n"
-#define HEADER_IM_A_TEAPOT "HTTP/1.1 418 IM-A-TEAPOT\n"
-#define HEADER_INTERNAL_SERVER_ERROR "HTTP/1.1 500 INTERNAL-SERVER-ERROR\n"
-#define MAX_NUMBER_OF_PARAMS 10
+#include "../data_parsers/string_parser.h"
+#include "../data_parsers/json_parser.h"
+
 
 struct _request_t{
         json_t *body;
@@ -55,6 +31,30 @@ typedef struct route_structure
         json_t *params;
 } route_structure_t;
 
+
+
+/*
+ *
+ * Malloc the memory needed for a response
+ * 
+ */
+static response_t *create_response(int client_socket)
+{
+        response_t *response = malloc(sizeof(response_t));
+
+        if (!response)
+                return NULL;
+
+        response->data = NULL;
+        response->json_data = NULL;
+        response->cookies = NULL;
+        response->cookies_properties = NULL;
+        response->status = 404;
+        response->client_socket = client_socket;
+
+        return response;
+}
+
 /*
  *
  * Close the socket associated to the response, and free all the memory
@@ -79,62 +79,79 @@ static void free_response(response_t *response)
 
 /*
  *
- * Add properties to the cookies
+ * Malloc the memory needed for a request
  * 
  */
-void add_properties(char *request_data, json_t *properties)
+static request_t *create_request(json_t *body, json_t *query, json_t *cookies)
 {
-        if (!properties || !request_data)
-                return;
+        request_t *request = malloc(sizeof(request_t));
 
-        json_t *max_age = json_object_get(properties, "Max-Age");
-        json_t *secure = json_object_get(properties, "Secure");
-        json_t *http_only = json_object_get(properties, "HttpOnly");    
-        json_t *path = json_object_get(properties, "Path");
-        json_t *domain = json_object_get(properties, "Domain");
-        
-        
-        if (max_age) {                  //intentar usar un solo strcat, creo que asi seria mas rapido
-                strcat(request_data, "; Max-Age=");             
-                strcat(request_data, json_string_value(max_age));
-        }
-        if (path) {
-                strcat(request_data, "; Path=");
-                strcat(request_data, json_string_value(path));
-        }
-        if (domain) {
-                strcat(request_data, "; Domain=");
-                strcat(request_data, json_string_value(domain));
-        }
-        if (secure) {
-                strcat(request_data, "; Secure");
-        }
-        if (http_only) {
-                strcat(request_data, "; HttpOnly");
-        }
+        if (!request)
+                return NULL;
 
+        request->body = body;
+        request->query = query;
+        request->cookies = cookies;
+        request->params = NULL;
+
+        return request;
 }
 
 /*
  *
- * Add the cookies and properties if exists to the response
+ * Free the memory associated to the request
  * 
  */
-void add_cookies_response(char *request_data, json_t *cookies, json_t *properties)
+static void free_request(request_t *request)
+{
+        if (!request)
+                return;
+
+        if (request->body != NULL) 
+                json_decref(request->body);
+        if (request->query != NULL)
+                json_decref(request->query);
+        if (request->cookies != NULL)
+                json_decref(request->cookies);
+        
+        free(request);
+}
+
+/*
+ *
+ * Malloc the memory needed for a route_structure
+ * 
+ */
+route_structure_t *create_route_structure(void *(*f)(request_t *request, response_t *response, void *aux), void *aux, json_t *params)
+{
+        if (!f)
+                return NULL;
+
+        route_structure_t *route_structure = malloc(sizeof(route_structure_t));
+
+        if (!route_structure)
+                return NULL;
+
+        route_structure->function = f;
+        route_structure->aux = aux;
+        route_structure->params = params;
+
+        return route_structure;
+}
+
+/*
+ *
+ * Free the memory associated to the json values in the route_structure
+ * 
+ */
+void free_route_structure_json_values(route_structure_t *route_structure)
 {
         const char *key;
         json_t *value;
-
-        json_object_foreach(cookies, key, value) {
-                if (json_is_string(value)) {
-                        strcat(request_data, "Set-Cookie: ");
-                        strcat(request_data, key);
-                        strcat(request_data, "=");
-                        strcat(request_data, json_string_value(value));
-                        add_properties(request_data, properties);
-                        strcat(request_data, "\n");
-                }
+        json_object_foreach(route_structure->params, key, value) {
+                json_decref(value);
         }
+
 }
 
 /*
@@ -193,258 +210,6 @@ void *send_response(response_t *response)
         free_response(response);
 
         return NULL;
-}
-
-/*
- *
- * Separate the route_url and method of a header
- * 
- */
-static void get_url_and_method(char *headers, char *method, char *route_url)
-{
-        if (!headers || !method || !route_url)
-                return;
-
-        char *header = strtok(headers, " ");
-        
-        int header_parse_counter = 0;
-        while (header != NULL)
-        {
-                switch (header_parse_counter)
-                {
-                case 0:
-                        strcpy(method, header);
-                case 1:
-                        strcpy(route_url, header);
-                }
-                header = strtok(NULL, " ");     
-                header_parse_counter++;
-        }
-}
-
-/*
- *
- * Get the query param of a route and convert it to json_t
- * 
- */
-static json_t *get_query_param(char *all_the_params, json_error_t error)
-{
-        if (!all_the_params)
-                return NULL;
-
-        char creating_json[SMALL_MAXLINE];
-        creating_json[0] = '{';
-        creating_json[1] = '\n';
-        creating_json[2] = '\0';
-
-        char *token = strtok(all_the_params, "?");
-        token = strtok(token, "&");
-        char claves[SMALL_MAXLINE];
-        char valores[SMALL_MAXLINE];
-
-        while (token) {
-                sscanf(token, "%[^=]=%[^=]", claves, valores);
-                strcat(claves, "\"");        
-                strcat(valores, "\"");
-                strcat(creating_json, "\"");
-                strcat(creating_json, claves);
-                strcat(creating_json, ":\"");
-                strcat(creating_json, valores);
-                strcat(creating_json, ",\n");
-                token = strtok(NULL, "&");
-        }
-        size_t len = strlen(creating_json);
-        creating_json[len -2] = '\n';
-        creating_json[len -1] = '}';
-        creating_json[len] = '\0';
-
-        return json_loads(creating_json, 0, &error);
-}
-
-/*
- *
- * Get the key-value pair of the cookies if exists
- * 
- */
-static json_t *parse_cookies(char *headers, json_error_t error)
-{
-        char *token = strstr(headers, "Cookie");
-
-        if (!token)
-                return NULL;
-
-        token = strtok(token, ":");
-        token = strtok(NULL, ":");
-
-        char cookie[MAXLINE];
-        sscanf(token, "%[^\n]", cookie);
-        cookie[strlen(cookie) -1] = '\0';
-
-        token = strtok(cookie, " ");
-        char keys[SMALL_MAXLINE];
-        char values[SMALL_MAXLINE];
-        char creating_json[MAXLINE];
-        creating_json[0] = '{';
-        creating_json[1] = '\n';
-        creating_json[2] = '\0';
-        size_t len;
-        while (token != NULL) {
-                sscanf(token, "%[^=]=%[^=]", keys, values);
-                len = strlen(values);
-                if (values[len -1] == ';')
-                        values[len -1] = '\0';
-                strcat(keys, "\"");        
-                strcat(values, "\"");
-                strcat(creating_json, "\"");
-                strcat(creating_json, keys);
-                strcat(creating_json, ":\"");
-                strcat(creating_json, values);
-                strcat(creating_json, ",\n");
-                token = strtok(NULL, " ");
-        }
-        len = strlen(creating_json);
-        creating_json[len -2] = '\n';
-        creating_json[len -1] = '}';
-        creating_json[len] = '\0';
-
-        return json_loads(creating_json, 0, &error);
-}
-
-/*
- *
- * Parse the request headers to get the route, method, params and query params
- * 
- */
-static json_t *parse_request(char *headers, char *route_url, char *method, json_t **cookies)
-{
-        if (!headers || !route_url || !method)
-                return NULL;
-
-        json_error_t error;
-        *cookies = parse_cookies(headers, error);
-        get_url_and_method(headers, method, route_url);
-
-        char temp[SMALL_MAXLINE];
-        strcpy(temp, route_url);
-        char all_the_params[SMALL_MAXLINE];
-        all_the_params[0] = '\0';
-        sscanf(route_url, "%*[^?]%s", all_the_params);
-        json_t *json_query_param = NULL;
-        
-        if (all_the_params[0] != '\0')
-                json_query_param = get_query_param(all_the_params, error);
-
-        
-        return json_query_param;
-}
-
-/*
- *
- * Convert a body of a request into json_t
- * 
- */
-static json_t *convert_to_json(char *request_data)
-{
-        if (!request_data)
-                return NULL;
-
-        char my_json[MAXLINE];
-        my_json[0] = '{'; 
-        my_json[1] = '\0';
-        strcat(my_json, request_data);
-
-        json_t *root;
-        json_error_t error;
-
-        root = json_loads(my_json, 0, &error);
-        if (!root)
-                return NULL;
-
-        return root;
-}
-
-/*
- *
- * Malloc the memory needed for a response
- * 
- */
-static response_t *create_response(int client_socket)
-{
-        response_t *response = malloc(sizeof(response_t));
-
-        if (!response)
-                return NULL;
-
-        response->data = NULL;
-        response->json_data = NULL;
-        response->cookies = NULL;
-        response->cookies_properties = NULL;
-        response->status = 404;
-        response->client_socket = client_socket;
-
-        return response;
-}
-
-/*
- *
- * Malloc the memory needed for a request
- * 
- */
-static request_t *create_request(json_t *body, json_t *query, json_t *cookies)
-{
-        request_t *request = malloc(sizeof(request_t));
-
-        if (!request)
-                return NULL;
-
-        request->body = body;
-        request->query = query;
-        request->cookies = cookies;
-        request->params = NULL;
-
-        return request;
-}
-
-/*
- *
- * Free the memory associated to the request
- * 
- */
-static void free_request(request_t *request)
-{
-        if (!request)
-                return;
-
-        if (request->body != NULL) 
-                json_decref(request->body);
-        if (request->query != NULL)
-                json_decref(request->query);
-        if (request->cookies != NULL)
-                json_decref(request->cookies);
-        
-        free(request);
-}
-
-/*
- *
- * Make an union of the method and the route_url to pass to the routes hash 
- * 
- */
-static char *get_route_of_hash(char *method, char *route_url)
-{
-        if (!method || !route_url)
-                return NULL;
-
-        char *route_of_hash = malloc(sizeof(char) * (SMALL_MAXLINE * 2));
-
-        if (!route_of_hash)
-                return NULL;
-
-        strtok(route_url, "?");
-        strcpy(route_of_hash, method);        
-        strcat(route_of_hash, route_url);
-
-        return route_of_hash;
 }
 
 /*
@@ -515,20 +280,7 @@ static route_structure_t *get_route(hash_t *routes, request_t *request, char *ro
         return route_structure;
 }
 
-/*
- *
- * Free the memory associated to the json values in the route_structure
- * 
- */
-void free_route_structure(route_structure_t *route_structure)
-{
-        const char *key;
-        json_t *value;
-        json_object_foreach(route_structure->params, key, value) {
-                json_decref(value);
-        }
 
-}
 
 /*
  *
@@ -565,7 +317,7 @@ void *handle_connection(void *client_pointer, void *routes)
 
         char *route_of_hash = get_route_of_hash(method, route_url);
         response_t *response = create_response(client_socket);
-        request_t *request = create_request(convert_to_json(token), json_query_param, cookies);
+        request_t *request = create_request(convert_body_to_json(token), json_query_param, cookies);
 
         if (!request || !response || !route_of_hash)
                 return NULL;
@@ -590,91 +342,17 @@ void *handle_connection(void *client_pointer, void *routes)
 
         
         free_request(request);
-        free_route_structure(route_structure);
+        free_route_structure_json_values(route_structure);
         
         return NULL;
 }
 
 /*
  *
- * Malloc the memory needed for a route_structure
+ * Create the route key to add in the routes hash
  * 
  */
-route_structure_t *create_route_structure(void *(*f)(request_t *request, response_t *response, void *aux), void *aux, json_t *params)
-{
-        if (!f)
-                return NULL;
-
-        route_structure_t *route_structure = malloc(sizeof(route_structure_t));
-
-        if (!route_structure)
-                return NULL;
-
-        route_structure->function = f;
-        route_structure->aux = aux;
-        route_structure->params = params;
-
-        return route_structure;
-}
-
-/*
- *
- * Create a json with the keys from the route params (example = /user/:id) and no value
- * 
- */
-json_t *create_json_from_params(char *route, int *number_of_params)
-{
-        json_t *json = json_object();
-        json_t *string = json_string("");       //siempre me pierde 1 byte de memoria, supongo que es aceptable (?
-        int i = 0;
-        int j = 0;
-        char temp_for_param_name[SMALL_MAXLINE];
-
-        while (route[i] != '\0') {
-                if (route[i] == ':') {
-                        i++;
-                        (*number_of_params)++;
-                        while((route[i] != '\0') && (route[i] != ':') && (route[i] != '/')) {
-                                temp_for_param_name[j] = route[i];
-                                j++;
-                                i++;
-                        }
-                        temp_for_param_name[j] = '\0';
-                        json_object_set(json, temp_for_param_name, string);
-                        j = 0;
-                }
-
-                i++;
-        }
-
-        return json;
-}
-
-/*
- *
- * Eliminate the :param_name from the route and add the number of this params to the route_name, to use in the hash
- * 
- */
-void create_route_with_no_params(char *route_name, char *token, int number_of_params)
-{
-        char temp[SMALL_MAXLINE];
-        int i = 0;
-        while (route_name[i] != '\0' && route_name[i] != ':') {
-                token[i] = route_name[i];
-                i++;
-        }
-        token[i] = '\0';
-        sprintf(temp, "%d", number_of_params);
-        token[strlen(token)-1] = '\0';
-        strcat(token, temp);
-}
-
-/*
- *
- * Get the cookies of a request
- * 
- */
-void create_route_key_for_hash(char *route_of_hash, char *route_name, int number_of_params, http_code type)
+static void create_route_key_for_hash(char *route_of_hash, char *route_name, int number_of_params, http_code type)
 {
         if (!route_of_hash || !route_name)
                 return;
@@ -833,27 +511,3 @@ json_t *get_querys(request_t *request)
         return request->query;
 }
 
-/*
- *
- * Load a html file as a string in the second parameter.
- * 
- */
-char *load_html(char *file_name, char *html_data, size_t size)
-{
-        if (!file_name || !html_data)
-                return NULL;
-
-        FILE *fd = fopen(file_name, "r");
-
-        if (!fd)
-                return NULL;
-
-        memset(html_data, 0, size);
-
-        if(fread(html_data, sizeof(char), size, fd) == 0)
-                return NULL;
-
-        fclose(fd);
-
-        return html_data;
-}
