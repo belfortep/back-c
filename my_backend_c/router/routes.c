@@ -122,7 +122,7 @@ static void free_request(request_t *request)
  * Malloc the memory needed for a route_structure
  * 
  */
-route_structure_t *create_route_structure(void *(*f)(request_t *request, response_t *response, void *aux), void *aux, json_t *params)
+static route_structure_t *create_route_structure(void *(*f)(request_t *request, response_t *response, void *aux), void *aux, json_t *params)
 {
         if (!f)
                 return NULL;
@@ -144,7 +144,7 @@ route_structure_t *create_route_structure(void *(*f)(request_t *request, respons
  * Free the memory associated to the json values in the route_structure
  * 
  */
-void free_route_structure_json_values(route_structure_t *route_structure)
+static void free_route_structure_json_values(route_structure_t *route_structure)
 {
         const char *key;
         json_t *value;
@@ -156,7 +156,7 @@ void free_route_structure_json_values(route_structure_t *route_structure)
 
 /*
  *
- * Write into a socket the response, including the headers
+ * Send the response to the socket
  * 
  */
 void *send_response(response_t *response)
@@ -165,6 +165,7 @@ void *send_response(response_t *response)
                 return NULL;
 
         char response_data[MAXLINE];
+        char header_and_response[MAXLINE];
 
         if (response->status == OK)      
                 snprintf(response_data, MAXLINE, HEADER_OK);
@@ -185,25 +186,26 @@ void *send_response(response_t *response)
         if (response->status == INTERNAL_SERVER_ERROR)      
                 snprintf(response_data, MAXLINE, HEADER_INTERNAL_SERVER_ERROR);
                 
+        if (!response->json_data && !response->data && response->status == NOT_FOUND)
+                snprintf(response_data, MAXLINE, "HTTP/1.1 404 NOT-FOUND\r\n\r\nNOT-FOUND");
 
         if (response->cookies)
                 add_cookies_response(response_data, response->cookies, response->cookies_properties);
 
-        if (response->data) {//intentar usar un solo strcat, creo que asi seria mas rapido
-                strcat(response_data, "Access-Control-Allow-Origin: *\nConnection: Keep-alive\nContent-Type: text/html; charset=UTF-8\nKeep-Alive: timeout=5, max=999\r\n\r\n");
-                strcat(response_data, response->data); 
+        if (response->data) {
+                snprintf(header_and_response, MAXLINE, "Access-Control-Allow-Origin: *\nConnection: Keep-alive\nContent-Type: text/html; charset=UTF-8\nKeep-Alive: timeout=5, max=999\r\n\r\n");
+                strcat(header_and_response, response->data);
+                strcat(response_data, header_and_response);
         }
 
         if (response->json_data && !response->data) {
-                strcat(response_data, "Access-Control-Allow-Origin: *\nConnection: Keep-alive\nContent-Type: application/json; charset=UTF-8\nKeep-Alive: timeout=5, max=999\r\n\r\n");
-                strcat(response_data, response->json_data);
+                snprintf(header_and_response, MAXLINE, "Access-Control-Allow-Origin: *\nConnection: Keep-alive\nContent-Type: application/json; charset=UTF-8\nKeep-Alive: timeout=5, max=999\r\n\r\n");
+                strcat(header_and_response, response->json_data);
+                strcat(response_data, header_and_response);
         }
 
-        if (!response->json_data && !response->data && response->status == NOT_FOUND)
-                snprintf(response_data, MAXLINE, "HTTP/1.1 404 NOT-FOUND\r\n\r\nNOT-FOUND");
 
-
-        if(maneja_error(write(response->client_socket, response_data, strlen(response_data))))
+        if(handle_error(write(response->client_socket, response_data, strlen(response_data))))
                 printf("oops");
         
 
@@ -280,8 +282,6 @@ static route_structure_t *get_route(hash_t *routes, request_t *request, char *ro
         return route_structure;
 }
 
-
-
 /*
  *
  * Receive the connection socket, reads the request and use the associated function to the route in the request
@@ -305,6 +305,9 @@ void *handle_connection(void *client_pointer, void *routes)
         char route_url[SMALL_MAXLINE];
         char headers[MAXLINE];
         json_t *cookies = NULL;
+        printf("request_data es: %s", request_data);
+        //Content-Length: un_numero /n
+        char *content_length = strstr(request_data, "Content-Length: ");
         char *token = strtok(request_data, "{");
 
         if (!token)
@@ -317,7 +320,7 @@ void *handle_connection(void *client_pointer, void *routes)
 
         char *route_of_hash = get_route_of_hash(method, route_url);
         response_t *response = create_response(client_socket);
-        request_t *request = create_request(convert_body_to_json(token), json_query_param, cookies);
+        request_t *request = create_request(convert_body_to_json(token, content_length), json_query_param, cookies);
 
         if (!request || !response || !route_of_hash)
                 return NULL;

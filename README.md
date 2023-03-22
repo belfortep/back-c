@@ -19,4 +19,3 @@
 - [x] Handle request and response
 - [x] Use of Cookies
 - [x] Receive multiple params in url
-- [ ] Automated tests

@@ -13,7 +13,7 @@ json_t *parse_cookies(char *headers, json_error_t error);
 
 json_t *parse_request(char *headers, char *route_url, char *method, json_t **cookies);
 
-json_t *convert_body_to_json(char *request_data);
+json_t *convert_body_to_json(char *request_data, char *content_length);
 
 json_t *create_json_from_params(char *route, int *number_of_params);
 

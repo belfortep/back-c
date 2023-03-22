@@ -183,12 +183,20 @@ json_t *parse_request(char *headers, char *route_url, char *method, json_t **coo
  * Convert a body of a request into json_t
  * 
  */
-json_t *convert_body_to_json(char *request_data)
+json_t *convert_body_to_json(char *request_data, char *content_length)
 {
-        if (!request_data)
+        if (!request_data || !content_length)
                 return NULL;
 
-        char my_json[MAXLINE];
+        int length = 0;
+        char *token = strtok(content_length, ":");
+        token = strtok(NULL, ":");
+        sscanf(token, "%i", &length);
+
+        if (length > (MAXLINE * 1024))
+                return NULL;
+
+        char my_json[length];
         my_json[0] = '{'; 
         my_json[1] = '\0';
         strcat(my_json, request_data);

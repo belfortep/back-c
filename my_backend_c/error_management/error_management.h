@@ -18,7 +18,7 @@
 #include <strings.h>
 #include <pthread.h>
 
-int maneja_error(ssize_t valor);
+int handle_error(ssize_t valor);
 
 
 #endif /* __ERROR_MANAGEMENT_H__ */

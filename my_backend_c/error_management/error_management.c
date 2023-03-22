@@ -3,9 +3,9 @@
 //simplemente un placeholder
 
 
-int maneja_error(ssize_t valor)
+int handle_error(ssize_t value)
 {
-        if (valor < 0)
+        if (value < 0)
                 return true;
         
         return false;
